@@ -1,21 +1,11 @@
 /**
- * Conflict resolution modal — On this device / In the cloud.
+ * Conflict resolution modal — kept as a thin fallback.
+ * Primary UX is the sidebar conflict card (one file at a time + hunk diff).
  */
 
-import { App, Modal, Setting } from 'obsidian';
+import { App, Modal } from 'obsidian';
 import { ConflictRecord } from '../types';
 import { ConflictResolution, ConflictResolver } from './ConflictResolver';
-
-function formatMeta(mtime?: number, size?: number): string {
-	const parts: string[] = [];
-	if (mtime !== undefined) {
-		parts.push(new Date(mtime).toLocaleString());
-	}
-	if (size !== undefined) {
-		parts.push(`${size} bytes`);
-	}
-	return parts.length > 0 ? parts.join(' · ') : 'Unavailable';
-}
 
 export class ConflictModal extends Modal {
 	private resolver: ConflictResolver;
@@ -44,45 +34,32 @@ export class ConflictModal extends Modal {
 			cls: 'easy-sync-conflict-path',
 			text: this.conflict.path,
 		});
-
-		const versions = contentEl.createDiv({ cls: 'easy-sync-conflict-versions' });
-
-		const device = versions.createDiv({ cls: 'easy-sync-conflict-version' });
-		device.createEl('h3', { text: 'On this device' });
-		device.createEl('p', {
-			text: formatMeta(this.conflict.deviceMtime, this.conflict.deviceSize),
+		contentEl.createEl('p', {
+			cls: 'easy-sync-muted',
+			text: 'Use the Easy Sync sidebar conflict card to review changes and resolve.',
 		});
 
-		const cloud = versions.createDiv({ cls: 'easy-sync-conflict-version' });
-		cloud.createEl('h3', { text: 'In the cloud' });
-		cloud.createEl('p', {
-			text: formatMeta(this.conflict.cloudMtime, this.conflict.cloudSize),
-		});
-
-		const actions = contentEl.createDiv({ cls: 'easy-sync-modal-actions' });
-
+		const actions = contentEl.createDiv({ cls: 'easy-sync-conflict-actions' });
 		const run = async (resolution: ConflictResolution) => {
 			await this.resolver.resolve(this.conflict.path, resolution);
 			this.close();
 			this.onResolved();
 		};
 
-		new Setting(actions)
-			.addButton((btn) =>
-				btn.setButtonText('Keep on this device').setCta().onClick(() => void run('keep-device')),
-			)
-			.addButton((btn) =>
-				btn.setButtonText('Keep in the cloud').onClick(() => void run('keep-cloud')),
-			)
-			.addButton((btn) =>
-				btn
-					.setButtonText('Keep both')
-					.setTooltip('Keeps the device file; saves the cloud copy as name (conflict YYYY-MM-DD).ext')
-					.onClick(() => void run('keep-both')),
-			)
-			.addButton((btn) =>
-				btn.setButtonText('Skip').onClick(() => void run('skip')),
-			);
+		const add = (label: string, resolution: ConflictResolution, primary = false) => {
+			const btn = actions.createEl('button', {
+				text: label,
+				cls: primary
+					? 'easy-sync-btn easy-sync-btn-primary'
+					: 'easy-sync-btn easy-sync-btn-secondary',
+			});
+			btn.addEventListener('click', () => void run(resolution));
+		};
+
+		add('Keep on this device', 'keep-device', true);
+		add('Keep in the cloud', 'keep-cloud');
+		add('Keep both', 'keep-both');
+		add('Skip', 'skip');
 	}
 
 	onClose(): void {

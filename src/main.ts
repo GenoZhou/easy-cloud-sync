@@ -376,6 +376,14 @@ export default class EasySyncPlugin extends Plugin {
 	getS3Provider(): S3Provider | null {
 		return this.s3Provider;
 	}
+
+	getPathCodec(): SyncPathCodec | null {
+		return this.pathCodec;
+	}
+
+	getPayloadCodec(): SyncPayloadCodec | null {
+		return this.payloadCodec;
+	}
 }
 
 function summaryFromResult(result: SyncResult): LastSyncSummary {

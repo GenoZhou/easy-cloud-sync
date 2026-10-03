@@ -1,14 +1,15 @@
 /**
- * Easy Sync sidebar — last sync, Sync now, conflicts, backups.
+ * Easy Sync sidebar — last sync, Sync now, conflict card, backups.
  * This is the only status surface (no status bar).
  */
 
-import { ItemView, Notice, WorkspaceLeaf } from 'obsidian';
+import { ItemView, Notice, TFile, WorkspaceLeaf } from 'obsidian';
 import type EasySyncPlugin from '../main';
 import { BackupInfo, ConflictRecord, LastSyncSummary } from '../types';
 import { isConnectionConfigured } from '../storage/S3Config';
-import { ConflictModal } from './ConflictModal';
 import { restoreBackupWithConfirm } from '../backup/BackupRestore';
+import { ConflictPreview, loadConflictPreview } from './conflictPreview';
+import { ConflictResolution } from './ConflictResolver';
 
 export const EASY_SYNC_VIEW_TYPE = 'easy-sync-sidebar';
 
@@ -16,6 +17,12 @@ export class EasySyncSidebarView extends ItemView {
 	plugin: EasySyncPlugin;
 	private conflicts: ConflictRecord[] = [];
 	private backups: BackupInfo[] = [];
+	/** Index into {@link conflicts} for the one-at-a-time conflict card. */
+	private conflictIndex = 0;
+	private preview: ConflictPreview | null = null;
+	private previewLoading = false;
+	private previewPath: string | null = null;
+	private resolving = false;
 
 	constructor(leaf: WorkspaceLeaf, plugin: EasySyncPlugin) {
 		super(leaf);
@@ -45,6 +52,9 @@ export class EasySyncSidebarView extends ItemView {
 	async refresh(): Promise<void> {
 		if (isConnectionConfigured(this.app, this.plugin.settings)) {
 			this.conflicts = (await this.plugin.getSyncJournal()?.getAllConflicts()) ?? [];
+			if (this.conflictIndex >= this.conflicts.length) {
+				this.conflictIndex = Math.max(0, this.conflicts.length - 1);
+			}
 			try {
 				this.backups = (await this.plugin.getRetentionManager()?.listBackups()) ?? [];
 				this.backups = this.backups.slice(0, 5);
@@ -54,8 +64,12 @@ export class EasySyncSidebarView extends ItemView {
 		} else {
 			this.conflicts = [];
 			this.backups = [];
+			this.conflictIndex = 0;
+			this.preview = null;
+			this.previewPath = null;
 		}
 		this.render();
+		void this.ensureConflictPreview();
 	}
 
 	private render(): void {
@@ -72,7 +86,7 @@ export class EasySyncSidebarView extends ItemView {
 			});
 			const openSettings = cta.createEl('button', {
 				text: 'Open settings',
-				cls: 'mod-cta',
+				cls: 'easy-sync-btn easy-sync-btn-primary',
 			});
 			openSettings.addEventListener('click', () => {
 				const setting = (
@@ -88,7 +102,7 @@ export class EasySyncSidebarView extends ItemView {
 
 		this.renderLastSync(contentEl);
 		this.renderSyncActions(contentEl);
-		this.renderConflicts(contentEl);
+		this.renderConflictCard(contentEl);
 		this.renderBackups(contentEl);
 	}
 
@@ -100,21 +114,23 @@ export class EasySyncSidebarView extends ItemView {
 		const body = section.createDiv({ cls: 'easy-sync-last-sync' });
 
 		body.createEl('p', {
-			text: `Status: ${statusLabel(summary)}`,
+			cls: 'easy-sync-status-line',
+			text: statusLabel(summary),
 		});
 
 		if (summary.completedAt) {
 			body.createEl('p', {
-				text: `Time: ${new Date(summary.completedAt).toLocaleString()}`,
+				cls: 'easy-sync-muted',
+				text: new Date(summary.completedAt).toLocaleString(),
 			});
 		}
 
-		body.createEl('p', {
-			text:
-				`Uploaded ${summary.filesUploaded} · Downloaded ${summary.filesDownloaded} · ` +
-				`Deleted ${summary.filesDeleted} · Conflicts ${summary.conflictCount} · ` +
-				`Skipped ${summary.filesSkipped}`,
-		});
+		const stats = body.createDiv({ cls: 'easy-sync-stat-grid' });
+		addStat(stats, 'Uploaded', summary.filesUploaded);
+		addStat(stats, 'Downloaded', summary.filesDownloaded);
+		addStat(stats, 'Deleted', summary.filesDeleted);
+		addStat(stats, 'Conflicts', summary.conflictCount);
+		addStat(stats, 'Skipped', summary.filesSkipped);
 
 		if (summary.lastError) {
 			body.createEl('p', {
@@ -127,18 +143,18 @@ export class EasySyncSidebarView extends ItemView {
 	private renderSyncActions(container: HTMLElement): void {
 		const section = container.createDiv({ cls: 'easy-sync-section' });
 		section.createEl('h3', { text: 'Sync' });
-		const row = section.createDiv({ cls: 'easy-sync-actions' });
-		const syncBtn = row.createEl('button', { text: 'Sync now', cls: 'mod-cta' });
+		const syncBtn = section.createEl('button', {
+			text: 'Sync now',
+			cls: 'easy-sync-btn easy-sync-btn-primary',
+		});
 		syncBtn.addEventListener('click', () => {
 			void this.plugin.triggerManualSync().then(() => this.refresh());
 		});
 	}
 
-	private renderConflicts(container: HTMLElement): void {
+	private renderConflictCard(container: HTMLElement): void {
 		const section = container.createDiv({ cls: 'easy-sync-section' });
-		section.createEl('h3', {
-			text: `Conflicts (${this.conflicts.length})`,
-		});
+		section.createEl('h3', { text: 'Conflicts' });
 
 		if (this.conflicts.length === 0) {
 			section.createEl('p', {
@@ -148,23 +164,244 @@ export class EasySyncSidebarView extends ItemView {
 			return;
 		}
 
-		const list = section.createEl('ul', { cls: 'easy-sync-conflict-list' });
-		for (const conflict of this.conflicts) {
-			const item = list.createEl('li');
-			const link = item.createEl('button', {
-				text: conflict.path,
-				cls: 'easy-sync-conflict-link',
+		const conflict = this.conflicts[this.conflictIndex]!;
+		const card = section.createDiv({ cls: 'easy-sync-conflict-card' });
+
+		const header = card.createDiv({ cls: 'easy-sync-conflict-card-header' });
+		header.createSpan({
+			cls: 'easy-sync-conflict-pager-label',
+			text: `${this.conflictIndex + 1} of ${this.conflicts.length}`,
+		});
+		const pager = header.createDiv({ cls: 'easy-sync-conflict-pager' });
+		const prev = pager.createEl('button', {
+			text: 'Prev',
+			cls: 'easy-sync-btn easy-sync-btn-ghost',
+		});
+		prev.disabled = this.conflictIndex <= 0;
+		prev.addEventListener('click', () => {
+			this.conflictIndex -= 1;
+			this.preview = null;
+			this.previewPath = null;
+			this.render();
+			void this.ensureConflictPreview();
+		});
+		const next = pager.createEl('button', {
+			text: 'Next',
+			cls: 'easy-sync-btn easy-sync-btn-ghost',
+		});
+		next.disabled = this.conflictIndex >= this.conflicts.length - 1;
+		next.addEventListener('click', () => {
+			this.conflictIndex += 1;
+			this.preview = null;
+			this.previewPath = null;
+			this.render();
+			void this.ensureConflictPreview();
+		});
+
+		card.createEl('p', {
+			cls: 'easy-sync-conflict-path',
+			text: conflict.path,
+		});
+
+		const meta = card.createDiv({ cls: 'easy-sync-conflict-meta' });
+		meta.createEl('p', {
+			text: `On this device · ${this.preview?.deviceMeta ?? formatConflictMeta(conflict, 'device')}`,
+		});
+		meta.createEl('p', {
+			text: `In the cloud · ${this.preview?.cloudMeta ?? formatConflictMeta(conflict, 'cloud')}`,
+		});
+
+		const legend = card.createDiv({ cls: 'easy-sync-diff-legend' });
+		legend.createSpan({ cls: 'easy-sync-diff-del', text: '− device' });
+		legend.createSpan({ cls: 'easy-sync-diff-add', text: '+ cloud' });
+
+		const diffHost = card.createDiv({ cls: 'easy-sync-diff' });
+		if (this.previewLoading && this.previewPath === conflict.path) {
+			diffHost.createEl('p', { cls: 'easy-sync-muted', text: 'Loading changes…' });
+		} else if (this.preview && this.preview.path === conflict.path) {
+			this.renderDiff(diffHost, this.preview);
+		} else {
+			diffHost.createEl('p', { cls: 'easy-sync-muted', text: 'Loading changes…' });
+		}
+
+		const nav = card.createDiv({ cls: 'easy-sync-btn-row' });
+		const openBtn = nav.createEl('button', {
+			text: 'Open file',
+			cls: 'easy-sync-btn easy-sync-btn-secondary',
+		});
+		openBtn.addEventListener('click', () => {
+			void this.openConflictFile(conflict.path);
+		});
+
+		const actions = card.createDiv({ cls: 'easy-sync-conflict-actions' });
+		this.addResolveButton(actions, 'Keep on this device', 'keep-device', true);
+		this.addResolveButton(actions, 'Keep in the cloud', 'keep-cloud');
+		this.addResolveButton(actions, 'Keep both', 'keep-both');
+		this.addResolveButton(actions, 'Skip', 'skip');
+	}
+
+	private renderDiff(host: HTMLElement, preview: ConflictPreview): void {
+		if (preview.message && preview.diffLines.length === 0) {
+			host.createEl('p', { cls: 'easy-sync-muted', text: preview.message });
+			return;
+		}
+
+		if (preview.identical) {
+			host.createEl('p', {
+				cls: 'easy-sync-muted',
+				text: preview.message ?? 'No text changes.',
 			});
-			link.addEventListener('click', () => {
-				const resolver = this.plugin.getConflictResolver();
-				if (!resolver) {
-					new Notice('Sync system not ready');
-					return;
-				}
-				new ConflictModal(this.app, resolver, conflict, () => {
-					void this.refresh();
-				}).open();
+			return;
+		}
+
+		const list = host.createDiv({ cls: 'easy-sync-diff-lines' });
+		for (const line of preview.diffLines) {
+			const row = list.createDiv({
+				cls: `easy-sync-diff-line easy-sync-diff-${line.kind}`,
 			});
+			const prefix =
+				line.kind === 'add' ? '+' : line.kind === 'del' ? '−' : ' ';
+			row.createSpan({ cls: 'easy-sync-diff-prefix', text: prefix });
+			row.createSpan({
+				cls: 'easy-sync-diff-text',
+				text: line.text.length > 0 ? line.text : ' ',
+			});
+		}
+
+		if (preview.omittedDiffLines > 0 || preview.truncatedInput) {
+			const note = host.createEl('p', { cls: 'easy-sync-muted' });
+			const parts: string[] = [];
+			if (preview.truncatedInput) {
+				parts.push('Large file — only the first part was compared.');
+			}
+			if (preview.omittedDiffLines > 0) {
+				parts.push(`${preview.omittedDiffLines} more changed lines not shown.`);
+			}
+			parts.push('Open the file to review the rest.');
+			note.setText(parts.join(' '));
+		}
+
+		if (preview.message) {
+			host.createEl('p', { cls: 'easy-sync-muted', text: preview.message });
+		}
+	}
+
+	private addResolveButton(
+		parent: HTMLElement,
+		label: string,
+		resolution: ConflictResolution,
+		primary = false,
+	): void {
+		const btn = parent.createEl('button', {
+			text: label,
+			cls: primary
+				? 'easy-sync-btn easy-sync-btn-primary'
+				: 'easy-sync-btn easy-sync-btn-secondary',
+		});
+		btn.disabled = this.resolving;
+		btn.addEventListener('click', () => {
+			void this.resolveCurrent(resolution);
+		});
+	}
+
+	private async resolveCurrent(resolution: ConflictResolution): Promise<void> {
+		const conflict = this.conflicts[this.conflictIndex];
+		if (!conflict) return;
+
+		if (resolution === 'skip') {
+			if (this.conflictIndex < this.conflicts.length - 1) {
+				this.conflictIndex += 1;
+			}
+			this.preview = null;
+			this.previewPath = null;
+			this.render();
+			void this.ensureConflictPreview();
+			return;
+		}
+
+		const resolver = this.plugin.getConflictResolver();
+		if (!resolver) {
+			new Notice('Sync system not ready');
+			return;
+		}
+
+		this.resolving = true;
+		this.render();
+		try {
+			await resolver.resolve(conflict.path, resolution);
+			new Notice(`Conflict resolved: ${conflict.path}`);
+			await this.refresh();
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Resolve failed';
+			new Notice(message);
+			this.resolving = false;
+			this.render();
+		} finally {
+			this.resolving = false;
+		}
+	}
+
+	private async openConflictFile(path: string): Promise<void> {
+		const file = this.app.vault.getAbstractFileByPath(path);
+		if (!(file instanceof TFile)) {
+			new Notice('File is not on this device');
+			return;
+		}
+		await this.app.workspace.getLeaf(false).openFile(file);
+	}
+
+	private async ensureConflictPreview(): Promise<void> {
+		const conflict = this.conflicts[this.conflictIndex];
+		if (!conflict) {
+			this.preview = null;
+			this.previewPath = null;
+			return;
+		}
+		if (this.previewPath === conflict.path && this.preview) {
+			return;
+		}
+
+		const s3 = this.plugin.getS3Provider();
+		const pathCodec = this.plugin.getPathCodec();
+		const payloadCodec = this.plugin.getPayloadCodec();
+		if (!s3 || !pathCodec || !payloadCodec) {
+			return;
+		}
+
+		const path = conflict.path;
+		this.previewLoading = true;
+		this.previewPath = path;
+		this.render();
+
+		try {
+			const preview = await loadConflictPreview(
+				this.app,
+				s3,
+				pathCodec,
+				payloadCodec,
+				conflict,
+			);
+			if (this.previewPath !== path) return;
+			this.preview = preview;
+		} catch (error) {
+			if (this.previewPath !== path) return;
+			const message = error instanceof Error ? error.message : 'Failed to load diff';
+			this.preview = {
+				kind: 'unavailable',
+				path,
+				deviceMeta: formatConflictMeta(conflict, 'device'),
+				cloudMeta: formatConflictMeta(conflict, 'cloud'),
+				diffLines: [],
+				omittedDiffLines: 0,
+				truncatedInput: false,
+				identical: false,
+				message,
+			};
+		} finally {
+			this.previewLoading = false;
+			if (this.previewPath === path) {
+				this.render();
+			}
 		}
 	}
 
@@ -172,8 +409,10 @@ export class EasySyncSidebarView extends ItemView {
 		const section = container.createDiv({ cls: 'easy-sync-section' });
 		section.createEl('h3', { text: 'Backups' });
 
-		const actions = section.createDiv({ cls: 'easy-sync-actions' });
-		const backupBtn = actions.createEl('button', { text: 'Backup now', cls: 'mod-cta' });
+		const backupBtn = section.createEl('button', {
+			text: 'Backup now',
+			cls: 'easy-sync-btn easy-sync-btn-primary',
+		});
 		backupBtn.addEventListener('click', () => {
 			void this.plugin.triggerManualBackup().then(() => this.refresh());
 		});
@@ -193,9 +432,12 @@ export class EasySyncSidebarView extends ItemView {
 				cls: 'easy-sync-backup-meta',
 				text: `${new Date(backup.timestamp).toLocaleString()} · ${backup.fileCount} files`,
 			});
-			const row = item.createDiv({ cls: 'easy-sync-backup-actions' });
+			const row = item.createDiv({ cls: 'easy-sync-btn-row' });
 
-			const downloadBtn = row.createEl('button', { text: 'Download' });
+			const downloadBtn = row.createEl('button', {
+				text: 'Download',
+				cls: 'easy-sync-btn easy-sync-btn-secondary',
+			});
 			downloadBtn.addEventListener('click', () => {
 				void this.plugin
 					.getBackupDownloader()
@@ -207,7 +449,10 @@ export class EasySyncSidebarView extends ItemView {
 					});
 			});
 
-			const restoreBtn = row.createEl('button', { text: 'Restore' });
+			const restoreBtn = row.createEl('button', {
+				text: 'Restore',
+				cls: 'easy-sync-btn easy-sync-btn-secondary',
+			});
 			restoreBtn.addEventListener('click', () => {
 				const downloader = this.plugin.getBackupDownloader();
 				if (!downloader) {
@@ -218,6 +463,21 @@ export class EasySyncSidebarView extends ItemView {
 			});
 		}
 	}
+}
+
+function addStat(parent: HTMLElement, label: string, value: number): void {
+	const cell = parent.createDiv({ cls: 'easy-sync-stat' });
+	cell.createSpan({ cls: 'easy-sync-stat-value', text: String(value) });
+	cell.createSpan({ cls: 'easy-sync-stat-label', text: label });
+}
+
+function formatConflictMeta(conflict: ConflictRecord, side: 'device' | 'cloud'): string {
+	const mtime = side === 'device' ? conflict.deviceMtime : conflict.cloudMtime;
+	const size = side === 'device' ? conflict.deviceSize : conflict.cloudSize;
+	const parts: string[] = [];
+	if (mtime !== undefined) parts.push(new Date(mtime).toLocaleString());
+	if (size !== undefined) parts.push(`${size} bytes`);
+	return parts.length > 0 ? parts.join(' · ') : 'Unavailable';
 }
 
 function statusLabel(summary: LastSyncSummary): string {
