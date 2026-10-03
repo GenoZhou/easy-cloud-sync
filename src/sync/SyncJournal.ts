@@ -258,6 +258,12 @@ export class SyncJournal {
 		await this.db!.put('metadata', value, key);
 	}
 
+	/** Removes a metadata key when present. */
+	async deleteMetadata(key: string): Promise<void> {
+		this.ensureInitialized();
+		await this.db!.delete('metadata', key);
+	}
+
 	/**
 	 * Clears all state, conflict, and metadata records.
 	 *

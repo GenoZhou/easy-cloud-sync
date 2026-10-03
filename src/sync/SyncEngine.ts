@@ -36,20 +36,13 @@ import { SyncPlanner } from './SyncPlanner';
 import { SyncExecutor } from './SyncExecutor';
 import { ChangeTracker } from './ChangeTracker';
 import { computeDestinationFingerprint } from './DestinationFingerprint';
-
-/**
- * Journal metadata key under which the destination fingerprint is persisted.
- *
- * The fingerprint identifies the S3 destination (bucket / endpoint / region /
- * prefix / provider) the journal's baselines were built against. A mismatch
- * between the stored value and the current settings means the baselines refer
- * to a different remote and must be discarded before they can drive a
- * destructive plan.
- */
-const DESTINATION_FINGERPRINT_KEY = 'destinationFingerprint';
-
-/** Journal metadata key holding the epoch-ms time of the last successful sync. */
-const LAST_SUCCESSFUL_SYNC_KEY = 'lastSuccessfulSyncAt';
+import {
+	DESTINATION_FINGERPRINT_KEY,
+	LAST_SUCCESSFUL_SYNC_KEY,
+	RESET_AUTHORITY_KEY,
+	parseResetAuthority,
+} from './journalKeys';
+import { t } from '../i18n';
 
 /**
  * Run a journal operation and rewrap any thrown error with a phase description.
@@ -209,6 +202,7 @@ export class SyncEngine {
 			// Phase 3 — Persist metadata
 			if (result.success) {
 				await this.journal.setMetadata(LAST_SUCCESSFUL_SYNC_KEY, Date.now());
+				await this.journal.deleteMetadata(RESET_AUTHORITY_KEY);
 			}
 
 			this.log(`Sync completed with ${result.errors.length} error(s)`);
@@ -290,17 +284,20 @@ export class SyncEngine {
 		const deleteCount = plan.reduce((count, item) => item.action === 'delete-local' ? count + 1 : count, 0);
 		if (deleteCount === 0) return null;
 
+		// Advanced reset intentionally mass-aligns one side onto the other.
+		const authority = parseResetAuthority(
+			await withJournalContext('reading reset authority', () =>
+				this.journal.getMetadata(RESET_AUTHORITY_KEY),
+			),
+		);
+		if (authority) return null;
+
 		const hasPriorSuccess = (await withJournalContext('reading prior successful sync timestamp',
 			() => this.journal.getMetadata(LAST_SUCCESSFUL_SYNC_KEY),
 		)) !== undefined;
 		if (hasPriorSuccess) return null;
 
-		return (
-			`Aborted: destructive plan blocked — ${deleteCount} of ${plan.length} action(s) would trash local files ` +
-			'against a destination that has no prior successful sync. ' +
-			'Verify the configured bucket and sync prefix point to the expected location, ' +
-			'then use "Reset sync journal" in Advanced settings if a fresh re-upload is intended.'
-		);
+		return t().engine.destructiveBlocked(deleteCount, plan.length);
 	}
 
 	/**

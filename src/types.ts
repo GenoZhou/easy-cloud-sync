@@ -142,6 +142,9 @@ export interface SyncError {
 export type LocalClassification = 'L0' | 'L+' | 'L=' | 'LΔ';
 export type RemoteClassification = 'R0' | 'R+' | 'R=' | 'RΔ';
 
+/** One-shot Advanced reset: prefer device or cloud instead of conflict. */
+export type ResetAuthority = 'local' | 'cloud';
+
 export interface DecisionInput {
 	path: string;
 	local: LocalClassification;
@@ -154,6 +157,8 @@ export interface DecisionInput {
 	hasBaseline: boolean;
 	localFingerprint?: string;
 	remoteFingerprint?: string;
+	/** When set, resolve differences toward this side (no conflicts). */
+	authority?: ResetAuthority;
 }
 
 /** Easy Sync writes plaintext only; xsalsa tag may appear on objects from other tools. */

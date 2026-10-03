@@ -14,6 +14,7 @@ import {
 	EasySyncSettings,
 	EMPTY_SYNC_SUMMARY,
 	LastSyncSummary,
+	ResetAuthority,
 	SyncResult,
 } from './types';
 import { S3Provider } from './storage/S3Provider';
@@ -24,6 +25,11 @@ import { SyncPathCodec } from './sync/SyncPathCodec';
 import { SyncPayloadCodec } from './sync/SyncPayloadCodec';
 import { SyncEngine } from './sync/SyncEngine';
 import { SyncScheduler } from './sync/SyncScheduler';
+import { computeDestinationFingerprint } from './sync/DestinationFingerprint';
+import {
+	DESTINATION_FINGERPRINT_KEY,
+	RESET_AUTHORITY_KEY,
+} from './sync/journalKeys';
 import { SnapshotCreator } from './backup/SnapshotCreator';
 import { BackupDownloader } from './backup/BackupDownloader';
 import { RetentionManager } from './backup/RetentionManager';
@@ -31,6 +37,7 @@ import { getOrCreateDeviceId } from './utils/deviceId';
 import { ConflictResolver } from './ui/ConflictResolver';
 import { ConflictDiffView, EASY_SYNC_DIFF_VIEW_TYPE } from './ui/ConflictDiffView';
 import { EasySyncSidebarView, EASY_SYNC_VIEW_TYPE } from './ui/SidebarView';
+import { t } from './i18n';
 
 /** Journal metadata key for durable last-sync sidebar summary (JSON string). */
 const LAST_SYNC_SUMMARY_KEY = 'lastSyncSummary';
@@ -124,7 +131,7 @@ export default class EasySyncPlugin extends Plugin {
 		this.registerView(EASY_SYNC_VIEW_TYPE, (leaf) => new EasySyncSidebarView(leaf, this));
 		this.registerView(EASY_SYNC_DIFF_VIEW_TYPE, (leaf) => new ConflictDiffView(leaf, this));
 
-		this.addRibbonIcon('refresh-cw', 'Open Easy Sync', () => {
+		this.addRibbonIcon('refresh-cw', t().commands.ribbonOpen, () => {
 			void this.activateSidebar();
 		});
 
@@ -179,20 +186,43 @@ export default class EasySyncPlugin extends Plugin {
 		this.refreshSidebar();
 	}
 
-	/** Clear IndexedDB sync baselines/conflicts (Advanced → Reset sync journal). */
-	async resetSyncJournal(): Promise<void> {
+	/**
+	 * Advanced reset: clear journal, prefer one side, then sync.
+	 * - local → overwrite cloud from this device
+	 * - cloud → overwrite this device from the cloud
+	 */
+	async runAuthorityReset(authority: ResetAuthority): Promise<void> {
 		if (!this.syncJournal) {
-			throw new Error('Sync journal is not available');
+			throw new Error(t().notices.journalUnavailable);
 		}
+		if (!isConnectionConfigured(this.app, this.settings)) {
+			throw new Error(t().notices.configureBeforeSync);
+		}
+		if (this.syncEngine?.isInProgress()) {
+			throw new Error(t().notices.syncInProgress);
+		}
+
 		await this.syncJournal.clear();
+		await this.syncJournal.setMetadata(
+			DESTINATION_FINGERPRINT_KEY,
+			computeDestinationFingerprint(this.settings),
+		);
+		await this.syncJournal.setMetadata(RESET_AUTHORITY_KEY, authority);
 		this.lastSyncSummary = { ...EMPTY_SYNC_SUMMARY };
 		this.refreshSidebar();
+
+		new Notice(
+			authority === 'cloud'
+				? t().notices.resetLocalStarted
+				: t().notices.resetCloudStarted,
+		);
+		await this.triggerManualSync();
 	}
 
 	private registerCommands(): void {
 		this.addCommand({
 			id: 'easy-sync-now',
-			name: 'Sync now',
+			name: t().commands.syncNow,
 			callback: () => {
 				void this.triggerManualSync();
 			},
@@ -200,7 +230,7 @@ export default class EasySyncPlugin extends Plugin {
 
 		this.addCommand({
 			id: 'easy-sync-open-sidebar',
-			name: 'Open sidebar',
+			name: t().commands.openSidebar,
 			callback: () => {
 				void this.activateSidebar();
 			},
@@ -208,7 +238,7 @@ export default class EasySyncPlugin extends Plugin {
 
 		this.addCommand({
 			id: 'easy-sync-backup-now',
-			name: 'Backup now',
+			name: t().commands.backupNow,
 			callback: () => {
 				void this.triggerManualBackup();
 			},
@@ -229,52 +259,56 @@ export default class EasySyncPlugin extends Plugin {
 
 	async triggerManualSync(): Promise<void> {
 		if (!isConnectionConfigured(this.app, this.settings)) {
-			new Notice('Configure S3 connection in settings before syncing.');
+			new Notice(t().notices.configureBeforeSync);
 			return;
 		}
 
 		if (this.syncEngine?.isInProgress()) {
-			new Notice('Sync already in progress…');
+			new Notice(t().notices.syncInProgress);
 			return;
 		}
 
-		new Notice('Starting sync…');
+		new Notice(t().notices.startingSync);
 		const result = await this.syncScheduler?.triggerSync('manual');
 
 		if (!result) {
-			new Notice('Sync did not run — check the Easy Sync sidebar for details.');
+			new Notice(t().notices.syncDidNotRun);
 			return;
 		}
 
 		const firstError = result.errors[0];
 		if (firstError) {
-			new Notice(`Sync completed with errors: ${firstError.message}`);
+			new Notice(t().notices.syncErrors(firstError.message));
 			return;
 		}
 
 		if (result.conflicts.length > 0) {
-			new Notice(`Sync completed with ${result.conflicts.length} conflict(s)`);
+			new Notice(t().notices.syncConflicts(result.conflicts.length));
 			return;
 		}
 
 		new Notice(
-			`Sync completed: ${result.filesUploaded} uploaded, ${result.filesDownloaded} downloaded, ${result.filesDeleted} deleted`,
+			t().notices.syncDone(
+				result.filesUploaded,
+				result.filesDownloaded,
+				result.filesDeleted,
+			),
 		);
 	}
 
 	async triggerManualBackup(): Promise<void> {
 		if (!isConnectionConfigured(this.app, this.settings)) {
-			new Notice('Configure S3 connection in settings before backing up.');
+			new Notice(t().notices.configureBeforeBackup);
 			return;
 		}
 
 		if (this.isBackupRunning) {
-			new Notice('Backup already in progress…');
+			new Notice(t().notices.backupInProgress);
 			return;
 		}
 
 		if (!this.snapshotCreator || !this.retentionManager) {
-			new Notice('Backup system not initialized');
+			new Notice(t().notices.backupNotReady);
 			return;
 		}
 

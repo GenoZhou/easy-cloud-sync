@@ -10,6 +10,7 @@ import type EasySyncPlugin from '../main';
 import { BackupInfo, ConflictRecord, LastSyncSummary } from '../types';
 import { isConnectionConfigured } from '../storage/S3Config';
 import { restoreBackupWithConfirm } from '../backup/BackupRestore';
+import { t } from '../i18n';
 
 export const EASY_SYNC_VIEW_TYPE = 'easy-sync-sidebar';
 
@@ -28,7 +29,7 @@ export class EasySyncSidebarView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return 'Easy Sync';
+		return t().sidebar.title;
 	}
 
 	getIcon(): string {
@@ -63,16 +64,17 @@ export class EasySyncSidebarView extends ItemView {
 		const { contentEl } = this;
 		contentEl.empty();
 		contentEl.addClass('easy-sync-sidebar');
+		const s = t().sidebar;
 
-		contentEl.createEl('h2', { text: 'Easy Sync' });
+		contentEl.createEl('h2', { text: s.title });
 
 		if (!isConnectionConfigured(this.app, this.plugin.settings)) {
 			const cta = contentEl.createDiv({ cls: 'easy-sync-setup-cta' });
 			cta.createEl('p', {
-				text: 'Configure your S3 connection in settings to start syncing.',
+				text: s.configurePrompt,
 			});
 			const openSettings = cta.createEl('button', {
-				text: 'Open settings',
+				text: s.openSettings,
 				cls: 'easy-sync-btn easy-sync-btn-primary',
 			});
 			openSettings.addEventListener('click', () => {
@@ -96,6 +98,7 @@ export class EasySyncSidebarView extends ItemView {
 	private renderLastSync(container: HTMLElement): void {
 		const section = container.createDiv({ cls: 'easy-sync-section' });
 		const summary = this.plugin.getLastSyncSummary();
+		const s = t().sidebar;
 
 		const statusParts = [statusLabel(summary)];
 		if (summary.completedAt) {
@@ -108,7 +111,13 @@ export class EasySyncSidebarView extends ItemView {
 
 		section.createEl('p', {
 			cls: 'easy-sync-muted easy-sync-stat-line',
-			text: formatStatLine(summary, this.conflicts.length),
+			text: s.statLine(
+				summary.filesUploaded,
+				summary.filesDownloaded,
+				summary.filesDeleted,
+				this.conflicts.length,
+				summary.filesSkipped,
+			),
 		});
 
 		if (summary.lastError) {
@@ -122,7 +131,7 @@ export class EasySyncSidebarView extends ItemView {
 	private renderSyncActions(container: HTMLElement): void {
 		const section = container.createDiv({ cls: 'easy-sync-section' });
 		const syncBtn = section.createEl('button', {
-			text: 'Sync now',
+			text: t().sidebar.syncNow,
 			cls: 'easy-sync-btn easy-sync-btn-primary',
 		});
 		syncBtn.addEventListener('click', () => {
@@ -132,11 +141,12 @@ export class EasySyncSidebarView extends ItemView {
 
 	private renderConflicts(container: HTMLElement): void {
 		const section = container.createDiv({ cls: 'easy-sync-section' });
+		const s = t().sidebar;
 
 		if (this.conflicts.length === 0) {
 			section.createEl('p', {
 				cls: 'easy-sync-muted',
-				text: 'No unresolved conflicts',
+				text: s.noConflicts,
 			});
 			return;
 		}
@@ -145,8 +155,8 @@ export class EasySyncSidebarView extends ItemView {
 			cls: 'easy-sync-muted',
 			text:
 				this.conflicts.length === 1
-					? '1 conflict'
-					: `${this.conflicts.length} conflicts`,
+					? s.conflictOne
+					: s.conflictsMany(this.conflicts.length),
 		});
 
 		const list = section.createEl('ul', { cls: 'easy-sync-conflict-list' });
@@ -159,7 +169,7 @@ export class EasySyncSidebarView extends ItemView {
 				text: conflict.path,
 			});
 			const showDiff = row.createEl('button', {
-				text: 'Show diff',
+				text: s.showDiff,
 				cls: 'easy-sync-btn easy-sync-btn-ghost easy-sync-btn-inline',
 			});
 			showDiff.addEventListener('click', () => {
@@ -170,9 +180,10 @@ export class EasySyncSidebarView extends ItemView {
 
 	private renderBackups(container: HTMLElement): void {
 		const section = container.createDiv({ cls: 'easy-sync-section' });
+		const s = t().sidebar;
 
 		const backupBtn = section.createEl('button', {
-			text: 'Backup now',
+			text: s.backupNow,
 			cls: 'easy-sync-btn easy-sync-btn-primary',
 		});
 		backupBtn.addEventListener('click', () => {
@@ -182,7 +193,7 @@ export class EasySyncSidebarView extends ItemView {
 		if (this.backups.length === 0) {
 			section.createEl('p', {
 				cls: 'easy-sync-muted',
-				text: 'No backups yet (keeps the last 5)',
+				text: s.noBackupsYet,
 			});
 			return;
 		}
@@ -197,28 +208,29 @@ export class EasySyncSidebarView extends ItemView {
 			const row = item.createDiv({ cls: 'easy-sync-btn-row' });
 
 			const downloadBtn = row.createEl('button', {
-				text: 'Download',
+				text: s.download,
 				cls: 'easy-sync-btn easy-sync-btn-secondary',
 			});
 			downloadBtn.addEventListener('click', () => {
 				void this.plugin
 					.getBackupDownloader()
 					?.triggerDownload(backup.name)
-					.then(() => new Notice('Download started'))
+					.then(() => new Notice(s.downloadStarted))
 					.catch((error: unknown) => {
-						const message = error instanceof Error ? error.message : 'Download failed';
+						const message =
+							error instanceof Error ? error.message : s.downloadFailed;
 						new Notice(message);
 					});
 			});
 
 			const restoreBtn = row.createEl('button', {
-				text: 'Restore',
+				text: s.restore,
 				cls: 'easy-sync-btn easy-sync-btn-secondary',
 			});
 			restoreBtn.addEventListener('click', () => {
 				const downloader = this.plugin.getBackupDownloader();
 				if (!downloader) {
-					new Notice('Backup system not ready');
+					new Notice(s.backupNotReady);
 					return;
 				}
 				void restoreBackupWithConfirm(this.app, downloader, backup.name);
@@ -227,24 +239,18 @@ export class EasySyncSidebarView extends ItemView {
 	}
 }
 
-function formatStatLine(summary: LastSyncSummary, openConflictCount: number): string {
-	return (
-		`\u2191${summary.filesUploaded} \u2193${summary.filesDownloaded} \u00d7${summary.filesDeleted}` +
-		` · ${openConflictCount} conflicts · ${summary.filesSkipped} skipped`
-	);
-}
-
 function statusLabel(summary: LastSyncSummary): string {
+	const s = t().sidebar;
 	switch (summary.status) {
 		case 'syncing':
-			return 'Syncing…';
+			return s.statusSyncing;
 		case 'synced':
-			return 'Synced';
+			return s.statusSynced;
 		case 'conflicts':
-			return 'Conflicts';
+			return s.statusConflicts;
 		case 'error':
-			return 'Error';
+			return s.statusError;
 		default:
-			return 'Idle';
+			return s.statusIdle;
 	}
 }
