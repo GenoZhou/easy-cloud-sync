@@ -150,12 +150,12 @@ export default class EasySyncPlugin extends Plugin {
 	async loadSettings(): Promise<void> {
 		const loaded = ((await this.loadData()) ?? {}) as Partial<EasySyncSettings> & {
 			secretAccessKey?: string;
+			conflictFolder?: string;
 		};
-		// Unpublished: drop any legacy plaintext secret; no migration path.
+		// Unpublished: drop legacy plaintext secret and unused Keep-both folder.
 		delete loaded.secretAccessKey;
+		delete loaded.conflictFolder;
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded);
-		// Unpublished: drop unused Keep-both folder setting if present in old data.
-		delete (this.settings as EasySyncSettings & { conflictFolder?: string }).conflictFolder;
 	}
 
 	async saveSettings(): Promise<void> {
@@ -326,13 +326,24 @@ export default class EasySyncPlugin extends Plugin {
 		let leaf = workspace.getLeavesOfType(EASY_SYNC_DIFF_VIEW_TYPE)[0];
 		if (!leaf) {
 			leaf = workspace.getLeaf('tab');
+			await leaf.setViewState({
+				type: EASY_SYNC_DIFF_VIEW_TYPE,
+				active: true,
+				state: { path },
+			});
 		}
-		await leaf.setViewState({
-			type: EASY_SYNC_DIFF_VIEW_TYPE,
-			active: true,
-			state: { path },
-		});
 		await workspace.revealLeaf(leaf);
+		const view = leaf.view;
+		if (view instanceof ConflictDiffView) {
+			// Always force a fresh session — setViewState alone may no-op for same path.
+			await view.openPath(path);
+		} else {
+			await leaf.setViewState({
+				type: EASY_SYNC_DIFF_VIEW_TYPE,
+				active: true,
+				state: { path },
+			});
+		}
 	}
 
 	/** Refresh sidebar after conflict resolve or sync status changes. */

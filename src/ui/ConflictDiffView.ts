@@ -11,6 +11,7 @@ import {
 	MAX_DIFF_PAGE_DISPLAY_LINES,
 	loadConflictPreview,
 } from './conflictPreview';
+import { beginConflictDiffSession } from './conflictDiffSession';
 import { ConflictResolution } from './ConflictResolver';
 
 export const EASY_SYNC_DIFF_VIEW_TYPE = 'easy-sync-conflict-diff';
@@ -47,12 +48,37 @@ export class ConflictDiffView extends ItemView {
 
 	async setState(state: Record<string, unknown>, result: ViewStateResult): Promise<void> {
 		const nextPath = typeof state?.path === 'string' ? state.path : null;
-		if (nextPath !== this.path) {
+		if (nextPath) {
+			this.applySession(beginConflictDiffSession(this.session(), nextPath));
+		} else {
+			this.path = null;
 			this.resolvedMessage = null;
 		}
-		this.path = nextPath;
 		await super.setState(state, result);
 		await this.reload();
+	}
+
+	/**
+	 * Always start a fresh session for {@link path} and reload the preview.
+	 * Call this from Show diff so same-path reopen works even when Obsidian
+	 * skips setState because the leaf state is unchanged.
+	 */
+	async openPath(path: string): Promise<void> {
+		this.applySession(beginConflictDiffSession(this.session(), path));
+		this.resolving = false;
+		this.preview = null;
+		const tokenBefore = this.loadToken;
+		await this.leaf.setViewState({
+			type: EASY_SYNC_DIFF_VIEW_TYPE,
+			active: true,
+			state: { path },
+		});
+		// setState may no-op when path is unchanged — force a fresh load then.
+		if (this.loadToken === tokenBefore || this.resolvedMessage !== null) {
+			this.applySession(beginConflictDiffSession(this.session(), path));
+			this.resolving = false;
+			await this.reload();
+		}
 	}
 
 	async onOpen(): Promise<void> {
@@ -61,6 +87,15 @@ export class ConflictDiffView extends ItemView {
 
 	async onClose(): Promise<void> {
 		this.contentEl.empty();
+	}
+
+	private session(): { path: string | null; resolvedMessage: string | null } {
+		return { path: this.path, resolvedMessage: this.resolvedMessage };
+	}
+
+	private applySession(session: { path: string | null; resolvedMessage: string | null }): void {
+		this.path = session.path;
+		this.resolvedMessage = session.resolvedMessage;
 	}
 
 	private async reload(): Promise<void> {
