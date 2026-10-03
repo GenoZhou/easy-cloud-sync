@@ -109,7 +109,7 @@ export class EasySyncSidebarView extends ItemView {
 
 		section.createEl('p', {
 			cls: 'easy-sync-muted easy-sync-stat-line',
-			text: formatStatLine(summary),
+			text: formatStatLine(summary, this.conflicts.length),
 		});
 
 		if (summary.lastError) {
@@ -233,10 +233,14 @@ export class EasySyncSidebarView extends ItemView {
 	}
 }
 
-function formatStatLine(summary: LastSyncSummary): string {
+function formatStatLine(summary: LastSyncSummary, openConflictCount: number): string {
+	const up = '\u2191';
+	const down = '\u2193';
+	const del = '\u00d7';
+	// Use live journal conflict count so the line matches the list below.
 	return (
-		`up ${summary.filesUploaded} · down ${summary.filesDownloaded} · del ${summary.filesDeleted}` +
-		` · ${summary.conflictCount} conflicts · ${summary.filesSkipped} skipped`
+		`${up}${summary.filesUploaded} ${down}${summary.filesDownloaded} ${del}${summary.filesDeleted}` +
+		` · ${openConflictCount} conflicts · ${summary.filesSkipped} skipped`
 	);
 }
 

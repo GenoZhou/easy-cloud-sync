@@ -248,20 +248,31 @@ export class ConflictDiffView extends ItemView {
 		try {
 			await resolver.resolve(path, resolution);
 			new Notice(`Conflict resolved: ${path}`);
-			await this.closeToSidebar();
 		} catch (error) {
 			const message = error instanceof Error ? error.message : 'Resolve failed';
 			new Notice(message);
 			this.resolving = false;
 			this.render();
+			return;
 		}
+
+		// Navigation is separate from resolve — failures must not look like resolve errors.
+		await this.closeToSidebar();
 	}
 
 	/** Refresh sidebar, reveal it, then close this diff leaf. */
 	private async closeToSidebar(): Promise<void> {
-		this.plugin.refreshConflictUi();
-		await this.plugin.activateSidebar();
-		this.leaf.detach();
+		try {
+			this.plugin.refreshConflictUi();
+			await this.plugin.activateSidebar();
+			this.leaf.detach();
+		} catch (error) {
+			const message =
+				error instanceof Error ? error.message : 'Could not return to the sidebar';
+			new Notice(message);
+			this.resolving = false;
+			this.render();
+		}
 	}
 
 	private renderDiff(host: HTMLElement, preview: ConflictPreview): void {
