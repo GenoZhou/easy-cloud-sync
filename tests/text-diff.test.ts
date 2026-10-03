@@ -4,6 +4,7 @@ import {
 	buildUnifiedHunks,
 	collapseContextRuns,
 	flattenHunksForDisplay,
+	interleaveChangePairs,
 } from '../src/utils/textDiff';
 
 describe('buildUnifiedHunks', () => {
@@ -44,6 +45,34 @@ describe('buildUnifiedHunks', () => {
 	});
 });
 
+describe('interleaveChangePairs', () => {
+	it('pairs consecutive dels and adds so device/cloud sit on adjacent rows', () => {
+		const lines = interleaveChangePairs([
+			{ kind: 'del', text: 'a' },
+			{ kind: 'del', text: 'b' },
+			{ kind: 'add', text: 'A' },
+			{ kind: 'add', text: 'B' },
+		]);
+		assert.deepEqual(
+			lines.map((l) => `${l.kind}:${l.text}`),
+			['del:a', 'add:A', 'del:b', 'add:B'],
+		);
+	});
+
+	it('leaves context runs in place', () => {
+		const lines = interleaveChangePairs([
+			{ kind: 'context', text: 'keep' },
+			{ kind: 'del', text: 'old' },
+			{ kind: 'add', text: 'new' },
+			{ kind: 'context', text: 'tail' },
+		]);
+		assert.deepEqual(
+			lines.map((l) => `${l.kind}:${l.text}`),
+			['context:keep', 'del:old', 'add:new', 'context:tail'],
+		);
+	});
+});
+
 describe('collapseContextRuns', () => {
 	it('folds consecutive identical context lines', () => {
 		const items = collapseContextRuns([
@@ -59,6 +88,21 @@ describe('collapseContextRuns', () => {
 			{ type: 'line', line: { kind: 'add', text: 'new' } },
 			{ type: 'fold', count: 1 },
 		]);
+	});
+
+	it('interleaves multi-line replacements before folding', () => {
+		const items = collapseContextRuns([
+			{ kind: 'del', text: 'a' },
+			{ kind: 'del', text: 'b' },
+			{ kind: 'add', text: 'A' },
+			{ kind: 'add', text: 'B' },
+		]);
+		assert.deepEqual(
+			items.map((item) =>
+				item.type === 'fold' ? `fold:${item.count}` : `${item.line.kind}:${item.line.text}`,
+			),
+			['del:a', 'add:A', 'del:b', 'add:B'],
+		);
 	});
 
 	it('passes through add/del-only lists unchanged in structure', () => {

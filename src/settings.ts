@@ -13,6 +13,7 @@ import {
 	SyncIntervalMinutes,
 } from './types';
 import { normalizePrefix } from './utils/paths';
+import { formatBucketLayoutPreview } from './utils/bucketLayout';
 import { S3Provider } from './storage/S3Provider';
 import { isConnectionConfigured } from './storage/S3Config';
 import { ConfirmModal } from './ui/ConfirmModal';
@@ -21,7 +22,7 @@ import { t } from './i18n';
 export type { EasySyncSettings };
 export { DEFAULT_SETTINGS } from './types';
 
-const SYNC_INTERVALS: SyncIntervalMinutes[] = [1, 2, 5, 10, 15, 30];
+const SYNC_INTERVALS: SyncIntervalMinutes[] = [0, 1, 2, 5, 10, 15, 30];
 
 export class EasySyncSettingTab extends PluginSettingTab {
 	plugin: EasySyncPlugin;
@@ -108,6 +109,7 @@ export class EasySyncSettingTab extends PluginSettingTab {
 				text.onChange(async (value) => {
 					this.plugin.settings.bucket = value.trim();
 					await this.plugin.saveSettings();
+					this.updateBucketLayoutPreview();
 				});
 			});
 
@@ -186,6 +188,7 @@ export class EasySyncSettingTab extends PluginSettingTab {
 				text.onChange(async (value) => {
 					this.plugin.settings.syncPrefix = normalizePrefix(value);
 					await this.plugin.saveSettings();
+					this.updateBucketLayoutPreview();
 				});
 			});
 
@@ -197,15 +200,21 @@ export class EasySyncSettingTab extends PluginSettingTab {
 				text.onChange(async (value) => {
 					this.plugin.settings.backupPrefix = normalizePrefix(value);
 					await this.plugin.saveSettings();
+					this.updateBucketLayoutPreview();
 				});
 			});
+
+		this.renderBucketLayoutPreview(containerEl);
 
 		new Setting(containerEl)
 			.setName(s.syncInterval)
 			.setDesc(s.syncIntervalDesc)
 			.addDropdown((dropdown) => {
 				for (const minutes of SYNC_INTERVALS) {
-					dropdown.addOption(String(minutes), s.intervalMinutes(minutes));
+					dropdown.addOption(
+						String(minutes),
+						minutes === 0 ? s.intervalOff : s.intervalMinutes(minutes),
+					);
 				}
 				dropdown.setValue(String(this.plugin.settings.syncIntervalMinutes));
 				dropdown.onChange(async (value) => {
@@ -213,6 +222,43 @@ export class EasySyncSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				});
 			});
+	}
+
+	private renderBucketLayoutPreview(containerEl: HTMLElement): void {
+		const s = t().settings;
+		const wrap = containerEl.createDiv({ cls: 'easy-sync-bucket-layout' });
+		wrap.createDiv({
+			cls: 'setting-item-name',
+			text: s.bucketLayoutHeading,
+		});
+		wrap.createEl('p', {
+			cls: 'setting-item-description',
+			text: s.bucketLayoutDesc,
+		});
+		wrap.createEl('pre', {
+			cls: 'easy-sync-bucket-tree',
+			text: this.bucketLayoutText(),
+		});
+	}
+
+	private updateBucketLayoutPreview(): void {
+		const tree = this.containerEl.querySelector('.easy-sync-bucket-tree');
+		if (tree instanceof HTMLElement) {
+			tree.setText(this.bucketLayoutText());
+		}
+	}
+
+	private bucketLayoutText(): string {
+		const s = t().settings;
+		return formatBucketLayoutPreview(
+			this.plugin.settings.bucket,
+			this.plugin.settings.syncPrefix,
+			this.plugin.settings.backupPrefix,
+			{
+				syncNote: s.bucketLayoutSyncNote,
+				backupNote: s.bucketLayoutBackupNote,
+			},
+		);
 	}
 
 	private renderAdvancedSection(containerEl: HTMLElement): void {

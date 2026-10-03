@@ -81,8 +81,49 @@ export type DiffDisplayItem =
 	| { type: 'fold'; count: number };
 
 /**
+ * Within each consecutive change run, pair device (del) and cloud (add) lines
+ * so replacements show as adjacent rows instead of all-dels-then-all-adds.
+ */
+export function interleaveChangePairs(lines: DiffLine[]): DiffLine[] {
+	const out: DiffLine[] = [];
+	let i = 0;
+	while (i < lines.length) {
+		const line = lines[i]!;
+		if (line.kind === 'context') {
+			out.push(line);
+			i++;
+			continue;
+		}
+
+		const dels: DiffLine[] = [];
+		const adds: DiffLine[] = [];
+		while (i < lines.length) {
+			const change = lines[i]!;
+			if (change.kind === 'del') {
+				dels.push(change);
+				i++;
+			} else if (change.kind === 'add') {
+				adds.push(change);
+				i++;
+			} else {
+				break;
+			}
+		}
+
+		const n = Math.max(dels.length, adds.length);
+		for (let j = 0; j < n; j++) {
+			const del = dels[j];
+			const add = adds[j];
+			if (del) out.push(del);
+			if (add) out.push(add);
+		}
+	}
+	return out;
+}
+
+/**
  * Collapse consecutive context (identical) lines into a single fold marker.
- * Add/del lines stay expanded.
+ * Add/del lines stay expanded (after del/add interleaving).
  */
 export function collapseContextRuns(lines: DiffLine[]): DiffDisplayItem[] {
 	const items: DiffDisplayItem[] = [];
@@ -95,7 +136,7 @@ export function collapseContextRuns(lines: DiffLine[]): DiffDisplayItem[] {
 		}
 	};
 
-	for (const line of lines) {
+	for (const line of interleaveChangePairs(lines)) {
 		if (line.kind === 'context') {
 			foldCount++;
 			continue;

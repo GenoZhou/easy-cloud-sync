@@ -21,7 +21,8 @@ export const S3_PROVIDER_NAMES: Record<S3ProviderType, string> = {
 // Settings Types
 // =============================================================================
 
-export type SyncIntervalMinutes = 1 | 2 | 5 | 10 | 15 | 30;
+/** 0 = manual only (no startup / interval sync). */
+export type SyncIntervalMinutes = 0 | 1 | 2 | 5 | 10 | 15 | 30;
 
 /** Fixed backup retention: keep newest 5 snapshots. */
 export const BACKUP_RETAIN_COPIES = 5;

@@ -53,7 +53,15 @@ export class SyncScheduler {
 
 		this.isEnabled = true;
 
-		const intervalMs = this.settings.syncIntervalMinutes * 60 * 1000;
+		const minutes = this.settings.syncIntervalMinutes;
+		if (minutes <= 0) {
+			if (this.settings.debugLogging) {
+				console.debug('[Easy Sync] Scheduler started: manual only (no interval)');
+			}
+			return;
+		}
+
+		const intervalMs = minutes * 60 * 1000;
 
 		this.intervalId = this.plugin.registerInterval(
 			window.setInterval(() => {
@@ -62,9 +70,7 @@ export class SyncScheduler {
 		);
 
 		if (this.settings.debugLogging) {
-			console.debug(
-				`[Easy Sync] Scheduler started: every ${this.settings.syncIntervalMinutes} minutes`,
-			);
+			console.debug(`[Easy Sync] Scheduler started: every ${minutes} minutes`);
 		}
 	}
 
@@ -97,6 +103,14 @@ export class SyncScheduler {
 		if (
 			(trigger === 'scheduled' || trigger === 'startup') &&
 			!isConnectionConfigured(this.plugin.app, this.settings)
+		) {
+			return null;
+		}
+
+		// Manual-only interval: skip startup and scheduled triggers.
+		if (
+			(trigger === 'scheduled' || trigger === 'startup') &&
+			this.settings.syncIntervalMinutes <= 0
 		) {
 			return null;
 		}

@@ -140,7 +140,10 @@ export default class EasySyncPlugin extends Plugin {
 		this.startSyncServices();
 
 		this.app.workspace.onLayoutReady(() => {
-			if (isConnectionConfigured(this.app, this.settings)) {
+			if (
+				isConnectionConfigured(this.app, this.settings) &&
+				this.settings.syncIntervalMinutes > 0
+			) {
 				void this.syncScheduler?.triggerSync('startup');
 			}
 		});
