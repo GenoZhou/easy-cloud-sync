@@ -15,7 +15,7 @@ import JSZip from 'jszip';
 export interface BackupDownloadResult {
 	files: Map<string, Uint8Array>;
 	errors: string[];
-	listedFileCount: number;
+	manifest: BackupManifest | null;
 }
 
 export class BackupDownloader {
@@ -43,51 +43,50 @@ export class BackupDownloader {
 	async downloadBackup(backupName: string): Promise<BackupDownloadResult> {
 		const files = new Map<string, Uint8Array>();
 		const errors: string[] = [];
+		let manifest: BackupManifest | null = null;
 		const prefix = addPrefix(`${backupName}`, this.normalizedBackupPrefix);
 		const prefixWithSlash = `${prefix}/`;
 		const objects = await this.s3Provider.listObjects(prefix, true);
 
-		let listedFileCount = 0;
-
 		for (const obj of objects) {
-			if (obj.key.endsWith('.backup-manifest.json')) continue;
-
 			const relativePath =
 				removePrefix(obj.key, prefix) ?? removePrefix(obj.key, prefixWithSlash) ?? '';
 			if (!relativePath) continue;
 
-			listedFileCount++;
-
 			try {
+				if (relativePath === '.backup-manifest.json') {
+					const text = new TextDecoder().decode(await this.s3Provider.downloadFile(obj.key));
+					manifest = JSON.parse(text) as BackupManifest;
+					continue;
+				}
 				const content = await this.s3Provider.downloadFile(obj.key);
 				files.set(relativePath, content);
 			} catch (error) {
 				const message = error instanceof Error ? error.message : 'Unknown error';
 				errors.push(`${relativePath}: ${message}`);
-				console.error(`Failed to download ${relativePath}:`, error);
 			}
 		}
 
-		return { files, errors, listedFileCount };
+		return { files, errors, manifest };
 	}
 
 	async createDownloadBlob(backupName: string): Promise<Blob> {
-		const { files, errors, listedFileCount } = await this.downloadBackup(backupName);
+		const { files, errors, manifest } = await this.downloadBackup(backupName);
+		const attempted = files.size + errors.length;
 		if (errors.length > 0) {
 			throw new Error(
-				`Download incomplete: ${errors.length} of ${listedFileCount} file(s) failed. ` +
+				`Download incomplete: ${errors.length} of ${attempted} file(s) failed. ` +
 					`First error: ${errors[0]}`,
 			);
 		}
 
 		const zip = new JSZip();
-
 		for (const [path, content] of files) {
 			zip.file(path, content);
 		}
 
-		const manifest = await this.getManifest(backupName);
-		zip.file('.backup-manifest.json', JSON.stringify(manifest, null, 2));
+		const resolvedManifest = manifest ?? (await this.getManifest(backupName));
+		zip.file('.backup-manifest.json', JSON.stringify(resolvedManifest, null, 2));
 
 		return await zip.generateAsync({ type: 'blob' });
 	}

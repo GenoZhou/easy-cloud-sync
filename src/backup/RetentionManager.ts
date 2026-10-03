@@ -29,12 +29,12 @@ export class RetentionManager {
 
 	/** Keep newest {@link BACKUP_RETAIN_COPIES}; delete older snapshots. */
 	async applyRetentionPolicy(): Promise<number> {
+		// listBackups() is newest-first; drop the tail beyond the retain limit.
 		const backups = await this.listBackups();
-		const toDelete = backupsExceedingRetention(backups, BACKUP_RETAIN_COPIES);
+		const toDelete =
+			backups.length > BACKUP_RETAIN_COPIES ? backups.slice(BACKUP_RETAIN_COPIES) : [];
 
-		for (const backup of toDelete) {
-			await this.deleteBackup(backup.name);
-		}
+		await Promise.all(toDelete.map((backup) => this.deleteBackup(backup.name)));
 
 		if (this.settings.debugLogging && toDelete.length > 0) {
 			console.debug(`[Easy Sync] Retention: deleted ${toDelete.length} old backups`);

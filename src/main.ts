@@ -155,11 +155,7 @@ export default class EasySyncPlugin extends Plugin {
 	}
 
 	async saveSettings(): Promise<void> {
-		const toPersist = { ...this.settings } as EasySyncSettings & {
-			secretAccessKey?: string;
-		};
-		delete toPersist.secretAccessKey;
-		await this.saveData(toPersist);
+		await this.saveData(this.settings);
 
 		this.s3Provider?.updateSettings(this.settings);
 		this.syncEngine?.updateSettings(this.settings);
@@ -170,12 +166,12 @@ export default class EasySyncPlugin extends Plugin {
 		this.retentionManager?.updateSettings(this.settings);
 		this.changeTracker?.updateExcludePatterns(this.settings.excludePatterns);
 
-		// Restart scheduler / tracker when connection or sync settings change.
-		this.onSettingsChanged();
-	}
-
-	onSettingsChanged(): void {
-		this.restartSyncServices();
+		// Start/stop scheduler from connection state; avoid tearing down ChangeTracker on every keystroke.
+		if (isConnectionConfigured(this.app, this.settings)) {
+			this.syncScheduler?.start();
+		} else {
+			this.syncScheduler?.stop();
+		}
 		this.refreshSidebar();
 	}
 
@@ -225,11 +221,6 @@ export default class EasySyncPlugin extends Plugin {
 	private stopSyncServices(): void {
 		this.changeTracker?.stopTracking();
 		this.syncScheduler?.stop();
-	}
-
-	private restartSyncServices(): void {
-		this.stopSyncServices();
-		this.startSyncServices();
 	}
 
 	async triggerManualSync(): Promise<void> {

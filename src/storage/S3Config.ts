@@ -50,7 +50,7 @@ export function providerSupportsConditionalWrites(_provider: S3ProviderType): bo
 
 /** Resolve the secret access key from Obsidian SecretStorage (never from data.json). */
 export function resolveSecretAccessKey(app: App, settings: EasySyncSettings): string | null {
-	const secretId = settings.secretAccessKeySecretId?.trim();
+	const secretId = settings.secretAccessKeySecretId.trim();
 	if (!secretId) {
 		return null;
 	}
@@ -104,7 +104,7 @@ export function validateConnectionSettings(
 		errors.push('Access Key ID is required');
 	}
 
-	if (!settings.secretAccessKeySecretId?.trim()) {
+	if (!settings.secretAccessKeySecretId.trim()) {
 		errors.push('Secret Access Key is required');
 	} else if (!secretAccessKey) {
 		errors.push('Secret Access Key is missing from secret storage');

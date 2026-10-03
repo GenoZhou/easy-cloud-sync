@@ -3,7 +3,7 @@
  * No sync/backup enable toggles; no retention knobs.
  */
 
-import { App, Modal, Notice, PluginSettingTab, SecretComponent, Setting } from 'obsidian';
+import { App, Notice, PluginSettingTab, SecretComponent, Setting } from 'obsidian';
 import type EasySyncPlugin from './main';
 import {
 	EasySyncSettings,
@@ -14,6 +14,7 @@ import {
 import { normalizePrefix } from './utils/paths';
 import { S3Provider } from './storage/S3Provider';
 import { isConnectionConfigured } from './storage/S3Config';
+import { ConfirmModal } from './ui/ConfirmModal';
 
 export type { EasySyncSettings };
 export { DEFAULT_SETTINGS } from './types';
@@ -281,59 +282,5 @@ export class EasySyncSettingTab extends PluginSettingTab {
 			const message = error instanceof Error ? error.message : 'Failed to reset sync journal';
 			new Notice(message);
 		}
-	}
-}
-
-class ConfirmModal extends Modal {
-	private resolvePromise: ((value: boolean) => void) | null = null;
-	private settled = false;
-
-	constructor(
-		app: App,
-		private title: string,
-		private message: string,
-		private confirmLabel: string,
-	) {
-		super(app);
-	}
-
-	openAndWait(): Promise<boolean> {
-		return new Promise((resolve) => {
-			this.resolvePromise = resolve;
-			this.open();
-		});
-	}
-
-	private settle(value: boolean): void {
-		if (this.settled) return;
-		this.settled = true;
-		this.resolvePromise?.(value);
-		this.resolvePromise = null;
-	}
-
-	onOpen(): void {
-		const { contentEl } = this;
-		contentEl.empty();
-		contentEl.createEl('h2', { text: this.title });
-		contentEl.createEl('p', { text: this.message });
-		const row = contentEl.createDiv({ cls: 'easy-sync-modal-actions' });
-		const cancel = row.createEl('button', { text: 'Cancel' });
-		cancel.addEventListener('click', () => {
-			this.settle(false);
-			this.close();
-		});
-		const confirmBtn = row.createEl('button', {
-			text: this.confirmLabel,
-			cls: 'mod-warning',
-		});
-		confirmBtn.addEventListener('click', () => {
-			this.settle(true);
-			this.close();
-		});
-	}
-
-	onClose(): void {
-		this.contentEl.empty();
-		this.settle(false);
 	}
 }
