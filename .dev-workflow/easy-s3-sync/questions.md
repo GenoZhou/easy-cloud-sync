@@ -79,7 +79,7 @@ Given conflict modal (Q5) + sidebar (Q7), how do users discover unresolved confl
 
 Recommended: Sidebar shows conflict count + list of conflicted paths; clicking a row opens the conflict modal. Status bar also shows conflict badge and opens the same sidebar/modal. No LOCAL_/REMOTE_ files unless user chooses Keep both (dated copy).
 
-Answer: Accept recommendation — sidebar conflict list + status bar badge → same modal; Keep both = dated copy only.
+Answer: Accept recommendation for sidebar conflict list → modal and Keep both dated copy. **Revised on plan confirmation:** no status bar (do not port reference status-bar sync/conflict UI); conflicts only via sidebar + modal.
 
 ### Q9: Sync scope defaults
 Status: answered

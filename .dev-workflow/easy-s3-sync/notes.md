@@ -38,3 +38,7 @@
 - Accept all recommendations Q11–Q13 (conflict labels, restore semantics, first-run CTA).
 - Frontier empty — draft plan for confirmation.
 
+## Plan confirmation (user)
+
+- Plan OK with revision: do **not** port out-of-plan reference features. Explicitly **no status bar** for sync/conflict status (sidebar is the ops surface).
+
