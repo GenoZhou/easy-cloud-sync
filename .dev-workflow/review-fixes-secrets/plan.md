@@ -1,6 +1,6 @@
 # Plan — review-fixes-secrets
 
-Status: draft
+Status: ready
 
 ## Goal
 
