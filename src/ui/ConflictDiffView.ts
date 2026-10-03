@@ -12,6 +12,7 @@ import {
 	loadConflictPreview,
 } from './conflictPreview';
 import { ConflictResolution } from './ConflictResolver';
+import { collapseContextRuns } from '../utils/textDiff';
 
 export const EASY_SYNC_DIFF_VIEW_TYPE = 'easy-sync-conflict-diff';
 
@@ -21,7 +22,6 @@ export class ConflictDiffView extends ItemView {
 	private preview: ConflictPreview | null = null;
 	private loading = false;
 	private resolving = false;
-	private resolvedMessage: string | null = null;
 	private loadToken = 0;
 
 	constructor(leaf: WorkspaceLeaf, plugin: EasySyncPlugin) {
@@ -47,19 +47,17 @@ export class ConflictDiffView extends ItemView {
 
 	async setState(state: Record<string, unknown>, result: ViewStateResult): Promise<void> {
 		this.path = typeof state?.path === 'string' ? state.path : null;
-		this.resolvedMessage = null;
 		await super.setState(state, result);
 		await this.reload();
 	}
 
 	/**
 	 * Open (or reopen) a conflict path from Show diff.
-	 * Clears any resolved banner and reloads even when Obsidian skips setState
-	 * because the leaf already has the same path.
+	 * Reloads even when Obsidian skips setState because the leaf already has
+	 * the same path.
 	 */
 	async openPath(path: string): Promise<void> {
 		this.path = path;
-		this.resolvedMessage = null;
 		this.resolving = false;
 		this.preview = null;
 		const tokenBefore = this.loadToken;
@@ -86,12 +84,6 @@ export class ConflictDiffView extends ItemView {
 		const path = this.path;
 		if (!path) {
 			this.preview = null;
-			this.loading = false;
-			this.render();
-			return;
-		}
-
-		if (this.resolvedMessage) {
 			this.loading = false;
 			this.render();
 			return;
@@ -178,26 +170,11 @@ export class ConflictDiffView extends ItemView {
 			return;
 		}
 
-		contentEl.createEl('h2', { text: 'Conflict diff' });
+		// Tab title already shows "Conflict diff" — only keep the path here.
 		contentEl.createEl('p', {
 			cls: 'easy-sync-conflict-path',
 			text: path,
 		});
-
-		if (this.resolvedMessage) {
-			contentEl.createEl('p', {
-				cls: 'easy-sync-muted',
-				text: this.resolvedMessage,
-			});
-			const back = contentEl.createEl('button', {
-				text: 'Back to sidebar list',
-				cls: 'easy-sync-btn easy-sync-btn-secondary',
-			});
-			back.addEventListener('click', () => {
-				void this.plugin.activateSidebar();
-			});
-			return;
-		}
 
 		if (this.loading) {
 			contentEl.createEl('p', { cls: 'easy-sync-muted', text: 'Loading changes…' });
@@ -210,16 +187,11 @@ export class ConflictDiffView extends ItemView {
 			return;
 		}
 
-		const meta = contentEl.createDiv({ cls: 'easy-sync-conflict-meta' });
-		meta.createEl('p', { text: `On this device · ${preview.deviceMeta}` });
-		meta.createEl('p', { text: `In the cloud · ${preview.cloudMeta}` });
-
 		const legend = contentEl.createDiv({ cls: 'easy-sync-diff-legend' });
 		legend.createSpan({ cls: 'easy-sync-diff-del', text: '− device' });
 		legend.createSpan({ cls: 'easy-sync-diff-add', text: '+ cloud' });
 
-		const toolbar = contentEl.createDiv({ cls: 'easy-sync-btn-row' });
-		const openBtn = toolbar.createEl('button', {
+		const openBtn = contentEl.createEl('button', {
 			text: preview.deviceAvailable ? 'Open file' : 'Not on device',
 			cls: 'easy-sync-btn easy-sync-btn-secondary',
 		});
@@ -232,10 +204,6 @@ export class ConflictDiffView extends ItemView {
 		this.renderDiff(diffHost, preview);
 
 		const actions = contentEl.createDiv({ cls: 'easy-sync-conflict-actions' });
-		actions.createEl('p', {
-			cls: 'easy-sync-muted',
-			text: 'Resolve this file',
-		});
 		this.addResolveButton(actions, 'Keep on this device', 'keep-device', true);
 		this.addResolveButton(actions, 'Keep in the cloud', 'keep-cloud');
 		this.addResolveButton(actions, 'Skip for now', 'skip');
@@ -265,6 +233,7 @@ export class ConflictDiffView extends ItemView {
 
 		if (resolution === 'skip') {
 			new Notice('Conflict kept for later. Resolve when ready.');
+			await this.closeToSidebar();
 			return;
 		}
 
@@ -278,18 +247,21 @@ export class ConflictDiffView extends ItemView {
 		this.render();
 		try {
 			await resolver.resolve(path, resolution);
-			const label =
-				resolution === 'keep-device' ? 'Kept on this device' : 'Kept in the cloud';
-			this.resolvedMessage = `${label}: ${path}`;
 			new Notice(`Conflict resolved: ${path}`);
-			this.plugin.refreshConflictUi();
+			await this.closeToSidebar();
 		} catch (error) {
 			const message = error instanceof Error ? error.message : 'Resolve failed';
 			new Notice(message);
-		} finally {
 			this.resolving = false;
 			this.render();
 		}
+	}
+
+	/** Refresh sidebar, reveal it, then close this diff leaf. */
+	private async closeToSidebar(): Promise<void> {
+		this.plugin.refreshConflictUi();
+		await this.plugin.activateSidebar();
+		this.leaf.detach();
 	}
 
 	private renderDiff(host: HTMLElement, preview: ConflictPreview): void {
@@ -307,7 +279,20 @@ export class ConflictDiffView extends ItemView {
 		}
 
 		const list = host.createDiv({ cls: 'easy-sync-diff-lines' });
-		for (const line of preview.diffLines) {
+		const items = collapseContextRuns(preview.diffLines);
+		for (const item of items) {
+			if (item.type === 'fold') {
+				list.createDiv({
+					cls: 'easy-sync-diff-fold',
+					text:
+						item.count === 1
+							? '··· 1 identical line'
+							: `··· ${item.count} identical lines`,
+				});
+				continue;
+			}
+
+			const line = item.line;
 			const row = list.createDiv({
 				cls: `easy-sync-diff-line easy-sync-diff-${line.kind}`,
 			});

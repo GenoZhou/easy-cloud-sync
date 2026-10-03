@@ -246,6 +246,16 @@
 	color: var(--text-muted);
 }
 
+.easy-sync-diff-fold {
+	padding: 4px 8px;
+	font-family: var(--font-monospace);
+	font-size: 0.78em;
+	color: var(--text-muted);
+	background: var(--background-secondary);
+	border-top: 1px solid var(--background-modifier-border);
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
 .easy-sync-modal-actions {
 	display: flex;
 	flex-direction: column;
