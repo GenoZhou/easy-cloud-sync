@@ -1,114 +1,400 @@
+/**
+ * Easy Sync — Obsidian community plugin
+ *
+ * Sync a vault to AWS S3, Cloudflare R2, or any S3-compatible endpoint,
+ * with manual snapshot backups (retain 5) and conflict resolution UX.
+ *
+ * Sync engine / S3 transport adapted from obsidian-s3-sync-and-backup (MIT)
+ * Copyright (c) 2025 Sathindu
+ */
+
+import { Notice, Plugin } from 'obsidian';
+import { DEFAULT_SETTINGS, EasySyncSettingTab } from './settings';
 import {
-	Editor,
-	MarkdownView,
-	MarkdownFileInfo,
-	Modal,
-	Notice,
-	Plugin,
-} from 'obsidian';
-import {
-	DEFAULT_SETTINGS,
-	MyPluginSettings,
-	SampleSettingTab,
-} from './settings';
+	EasySyncSettings,
+	EMPTY_SYNC_SUMMARY,
+	LastSyncSummary,
+	SyncResult,
+} from './types';
+import { S3Provider } from './storage/S3Provider';
+import { isConnectionConfigured } from './storage/S3Config';
+import { SyncJournal } from './sync/SyncJournal';
+import { ChangeTracker } from './sync/ChangeTracker';
+import { SyncPathCodec } from './sync/SyncPathCodec';
+import { SyncPayloadCodec } from './sync/SyncPayloadCodec';
+import { SyncEngine } from './sync/SyncEngine';
+import { SyncScheduler } from './sync/SyncScheduler';
+import { SnapshotCreator } from './backup/SnapshotCreator';
+import { BackupDownloader } from './backup/BackupDownloader';
+import { RetentionManager } from './backup/RetentionManager';
+import { getOrCreateDeviceId } from './utils/deviceId';
+import { ConflictResolver } from './ui/ConflictResolver';
+import { EasySyncSidebarView, EASY_SYNC_VIEW_TYPE } from './ui/SidebarView';
 
-// Remember to rename these classes and interfaces!
+/** Journal metadata key for durable last-sync sidebar summary (JSON string). */
+const LAST_SYNC_SUMMARY_KEY = 'lastSyncSummary';
 
-export default class MyPlugin extends Plugin {
-	settings!: MyPluginSettings;
+export default class EasySyncPlugin extends Plugin {
+	settings!: EasySyncSettings;
 
-	async onload() {
+	private s3Provider: S3Provider | null = null;
+	private syncJournal: SyncJournal | null = null;
+	private changeTracker: ChangeTracker | null = null;
+	private pathCodec: SyncPathCodec | null = null;
+	private payloadCodec: SyncPayloadCodec | null = null;
+	private syncEngine: SyncEngine | null = null;
+	private syncScheduler: SyncScheduler | null = null;
+	private snapshotCreator: SnapshotCreator | null = null;
+	private backupDownloader: BackupDownloader | null = null;
+	private retentionManager: RetentionManager | null = null;
+	private conflictResolver: ConflictResolver | null = null;
+	private deviceId = '';
+	private isBackupRunning = false;
+	private lastSyncSummary: LastSyncSummary = { ...EMPTY_SYNC_SUMMARY };
+
+	async onload(): Promise<void> {
 		await this.loadSettings();
+		this.deviceId = getOrCreateDeviceId(this.app);
 
-		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (_evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
+		this.s3Provider = new S3Provider(this.settings, this.app);
 
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status bar text');
+		const vaultName = this.app.vault.getName();
+		this.syncJournal = new SyncJournal(vaultName);
+		await this.syncJournal.initialize();
+		await this.loadLastSyncSummary();
 
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
+		this.pathCodec = new SyncPathCodec(this.settings.syncPrefix);
+		this.payloadCodec = new SyncPayloadCodec();
+		this.changeTracker = new ChangeTracker(this);
+
+		this.syncEngine = new SyncEngine(
+			this.app,
+			this.s3Provider,
+			this.syncJournal,
+			this.pathCodec,
+			this.payloadCodec,
+			this.changeTracker,
+			this.settings,
+			this.deviceId,
+		);
+
+		this.syncScheduler = new SyncScheduler(this, this.syncEngine, this.settings);
+		this.syncScheduler.setCallbacks({
+			onSyncStart: () => {
+				this.lastSyncSummary = {
+					...this.lastSyncSummary,
+					status: 'syncing',
+					lastError: null,
+				};
+				this.refreshSidebar();
 			},
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'replace-selected',
-			name: 'Replace selected content',
-			editorCallback: (
-				editor: Editor,
-				_ctx: MarkdownView | MarkdownFileInfo,
-			) => {
-				editor.replaceSelection('Sample editor command');
-			},
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-modal-complex',
-			name: 'Open modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView =
-					this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
+			onSyncComplete: (result) => {
+				this.lastSyncSummary = summaryFromResult(result);
+				void this.persistLastSyncSummary();
+				this.refreshSidebar();
+				const nonRecoverable = result.errors.find((error) => !error.recoverable);
+				if (nonRecoverable) {
+					new Notice(`Sync blocked: ${nonRecoverable.message}`, 15000);
 				}
-				return false;
+			},
+			onSyncError: (error) => {
+				this.lastSyncSummary = {
+					...this.lastSyncSummary,
+					status: 'error',
+					lastError: error,
+				};
+				void this.persistLastSyncSummary();
+				this.refreshSidebar();
 			},
 		});
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
+		this.snapshotCreator = new SnapshotCreator(this.app, this.s3Provider, this.settings);
+		this.backupDownloader = new BackupDownloader(this.s3Provider, this.settings);
+		this.retentionManager = new RetentionManager(this.s3Provider, this.settings);
+		this.conflictResolver = new ConflictResolver(
+			this.app,
+			this.s3Provider,
+			this.syncJournal,
+			this.pathCodec,
+			this.payloadCodec,
+			this.deviceId,
+		);
 
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(activeDocument, 'click', (_evt: MouseEvent) => {
-			new Notice('Click');
+		this.registerView(EASY_SYNC_VIEW_TYPE, (leaf) => new EasySyncSidebarView(leaf, this));
+
+		this.addRibbonIcon('refresh-cw', 'Open Easy Sync', () => {
+			void this.activateSidebar();
 		});
 
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(
-			window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000),
-		);
+		this.addSettingTab(new EasySyncSettingTab(this.app, this));
+		this.registerCommands();
+		this.startSyncServices();
+
+		this.app.workspace.onLayoutReady(() => {
+			if (isConnectionConfigured(this.app, this.settings)) {
+				void this.syncScheduler?.triggerSync('startup');
+			}
+		});
 	}
 
-	onunload() {}
-
-	async loadSettings() {
-		this.settings = Object.assign(
-			{},
-			DEFAULT_SETTINGS,
-			(await this.loadData()) as Partial<MyPluginSettings>,
-		);
+	onunload(): void {
+		this.stopSyncServices();
+		this.syncJournal?.close();
+		this.syncJournal = null;
+		this.s3Provider?.destroy();
+		this.s3Provider = null;
 	}
 
-	async saveSettings() {
+	async loadSettings(): Promise<void> {
+		const loaded = ((await this.loadData()) ?? {}) as Partial<EasySyncSettings> & {
+			secretAccessKey?: string;
+		};
+		// Unpublished: drop any legacy plaintext secret; no migration path.
+		delete loaded.secretAccessKey;
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded);
+	}
+
+	async saveSettings(): Promise<void> {
 		await this.saveData(this.settings);
+
+		this.s3Provider?.updateSettings(this.settings);
+		this.syncEngine?.updateSettings(this.settings);
+		this.pathCodec?.updatePrefix(this.settings.syncPrefix);
+		this.syncScheduler?.updateSettings(this.settings);
+		this.snapshotCreator?.updateSettings(this.settings);
+		this.backupDownloader?.updateSettings(this.settings);
+		this.retentionManager?.updateSettings(this.settings);
+		this.changeTracker?.updateExcludePatterns(this.settings.excludePatterns);
+
+		// Start/stop scheduler from connection state; avoid tearing down ChangeTracker on every keystroke.
+		if (isConnectionConfigured(this.app, this.settings)) {
+			this.syncScheduler?.start();
+		} else {
+			this.syncScheduler?.stop();
+		}
+		this.refreshSidebar();
+	}
+
+	/** Clear IndexedDB sync baselines/conflicts (Advanced → Reset sync journal). */
+	async resetSyncJournal(): Promise<void> {
+		if (!this.syncJournal) {
+			throw new Error('Sync journal is not available');
+		}
+		await this.syncJournal.clear();
+		this.lastSyncSummary = { ...EMPTY_SYNC_SUMMARY };
+		this.refreshSidebar();
+	}
+
+	private registerCommands(): void {
+		this.addCommand({
+			id: 'easy-sync-now',
+			name: 'Sync now',
+			callback: () => {
+				void this.triggerManualSync();
+			},
+		});
+
+		this.addCommand({
+			id: 'easy-sync-open-sidebar',
+			name: 'Open sidebar',
+			callback: () => {
+				void this.activateSidebar();
+			},
+		});
+
+		this.addCommand({
+			id: 'easy-sync-backup-now',
+			name: 'Backup now',
+			callback: () => {
+				void this.triggerManualBackup();
+			},
+		});
+	}
+
+	private startSyncServices(): void {
+		this.changeTracker?.startTracking(this.settings.excludePatterns);
+		if (isConnectionConfigured(this.app, this.settings)) {
+			this.syncScheduler?.start();
+		}
+	}
+
+	private stopSyncServices(): void {
+		this.changeTracker?.stopTracking();
+		this.syncScheduler?.stop();
+	}
+
+	async triggerManualSync(): Promise<void> {
+		if (!isConnectionConfigured(this.app, this.settings)) {
+			new Notice('Configure S3 connection in settings before syncing.');
+			return;
+		}
+
+		if (this.syncEngine?.isInProgress()) {
+			new Notice('Sync already in progress…');
+			return;
+		}
+
+		new Notice('Starting sync…');
+		const result = await this.syncScheduler?.triggerSync('manual');
+
+		if (!result) {
+			new Notice('Sync did not run — check the Easy Sync sidebar for details.');
+			return;
+		}
+
+		const firstError = result.errors[0];
+		if (firstError) {
+			new Notice(`Sync completed with errors: ${firstError.message}`);
+			return;
+		}
+
+		if (result.conflicts.length > 0) {
+			new Notice(`Sync completed with ${result.conflicts.length} conflict(s)`);
+			return;
+		}
+
+		new Notice(
+			`Sync completed: ${result.filesUploaded} uploaded, ${result.filesDownloaded} downloaded, ${result.filesDeleted} deleted`,
+		);
+	}
+
+	async triggerManualBackup(): Promise<void> {
+		if (!isConnectionConfigured(this.app, this.settings)) {
+			new Notice('Configure S3 connection in settings before backing up.');
+			return;
+		}
+
+		if (this.isBackupRunning) {
+			new Notice('Backup already in progress…');
+			return;
+		}
+
+		if (!this.snapshotCreator || !this.retentionManager) {
+			new Notice('Backup system not initialized');
+			return;
+		}
+
+		new Notice('Starting backup…');
+		this.isBackupRunning = true;
+
+		try {
+			const vaultName = this.app.vault.getName();
+			const result = await this.snapshotCreator.createSnapshot(this.deviceId, vaultName);
+
+			// Retain-5 whenever a snapshot exists on S3, including partial success.
+			if (result.snapshotCreated) {
+				await this.retentionManager.applyRetentionPolicy();
+			}
+
+			if (result.success) {
+				new Notice(`Backup completed: ${result.filesBackedUp} files`);
+			} else {
+				const errorMsg = result.errors[0] ?? 'Unknown error';
+				new Notice(`Backup completed with errors: ${errorMsg}`);
+			}
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+			new Notice(`Backup failed: ${errorMessage}`);
+		} finally {
+			this.isBackupRunning = false;
+			this.refreshSidebar();
+		}
+	}
+
+	async activateSidebar(): Promise<void> {
+		const { workspace } = this.app;
+		let leaf = workspace.getLeavesOfType(EASY_SYNC_VIEW_TYPE)[0];
+		if (!leaf) {
+			const right = workspace.getRightLeaf(false);
+			leaf = right ?? workspace.getLeaf(true);
+			await leaf.setViewState({ type: EASY_SYNC_VIEW_TYPE, active: true });
+		}
+		await workspace.revealLeaf(leaf);
+		const view = leaf.view;
+		if (view instanceof EasySyncSidebarView) {
+			await view.refresh();
+		}
+	}
+
+	private refreshSidebar(): void {
+		for (const leaf of this.app.workspace.getLeavesOfType(EASY_SYNC_VIEW_TYPE)) {
+			const view = leaf.view;
+			if (view instanceof EasySyncSidebarView) {
+				void view.refresh();
+			}
+		}
+	}
+
+	getLastSyncSummary(): LastSyncSummary {
+		return this.lastSyncSummary;
+	}
+
+	/** Restore last-run summary from the journal so the sidebar survives reload. */
+	private async loadLastSyncSummary(): Promise<void> {
+		if (!this.syncJournal) return;
+		const raw = await this.syncJournal.getMetadata(LAST_SYNC_SUMMARY_KEY);
+		if (typeof raw !== 'string' || raw.length === 0) return;
+
+		try {
+			const parsed = JSON.parse(raw) as Partial<LastSyncSummary>;
+			const status = parsed.status === 'syncing' ? 'idle' : (parsed.status ?? 'idle');
+			this.lastSyncSummary = {
+				...EMPTY_SYNC_SUMMARY,
+				...parsed,
+				status,
+			};
+		} catch {
+			// Ignore corrupt persisted summary; next sync will rewrite it.
+		}
+	}
+
+	private async persistLastSyncSummary(): Promise<void> {
+		if (!this.syncJournal) return;
+		if (this.lastSyncSummary.status === 'syncing') return;
+		await this.syncJournal.setMetadata(
+			LAST_SYNC_SUMMARY_KEY,
+			JSON.stringify(this.lastSyncSummary),
+		);
+	}
+
+	getSyncJournal(): SyncJournal | null {
+		return this.syncJournal;
+	}
+
+	getRetentionManager(): RetentionManager | null {
+		return this.retentionManager;
+	}
+
+	getBackupDownloader(): BackupDownloader | null {
+		return this.backupDownloader;
+	}
+
+	getConflictResolver(): ConflictResolver | null {
+		return this.conflictResolver;
+	}
+
+	getS3Provider(): S3Provider | null {
+		return this.s3Provider;
 	}
 }
 
-class SampleModal extends Modal {
-	onOpen() {
-		const { contentEl } = this;
-		contentEl.setText('Woah!');
-	}
+function summaryFromResult(result: SyncResult): LastSyncSummary {
+	const status: LastSyncSummary['status'] =
+		result.errors.length > 0
+			? 'error'
+			: result.conflicts.length > 0
+				? 'conflicts'
+				: 'synced';
 
-	onClose() {
-		const { contentEl } = this;
-		contentEl.empty();
-	}
+	return {
+		status,
+		startedAt: result.startedAt,
+		completedAt: result.completedAt,
+		filesUploaded: result.filesUploaded,
+		filesDownloaded: result.filesDownloaded,
+		filesDeleted: result.filesDeleted,
+		filesSkipped: result.filesSkipped,
+		conflictCount: result.conflicts.length,
+		lastError: result.errors[0]?.message ?? null,
+	};
 }
