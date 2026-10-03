@@ -75,6 +75,38 @@ export function flattenHunksForDisplay(
 	return { lines, omitted: 0 };
 }
 
+/** Display row: a real diff line, or a folded run of identical context. */
+export type DiffDisplayItem =
+	| { type: 'line'; line: DiffLine }
+	| { type: 'fold'; count: number };
+
+/**
+ * Collapse consecutive context (identical) lines into a single fold marker.
+ * Add/del lines stay expanded.
+ */
+export function collapseContextRuns(lines: DiffLine[]): DiffDisplayItem[] {
+	const items: DiffDisplayItem[] = [];
+	let foldCount = 0;
+
+	const flushFold = () => {
+		if (foldCount > 0) {
+			items.push({ type: 'fold', count: foldCount });
+			foldCount = 0;
+		}
+	};
+
+	for (const line of lines) {
+		if (line.kind === 'context') {
+			foldCount++;
+			continue;
+		}
+		flushFold();
+		items.push({ type: 'line', line });
+	}
+	flushFold();
+	return items;
+}
+
 function countLines(hunks: DiffHunk[]): number {
 	return hunks.reduce((n, h) => n + h.lines.length, 0);
 }

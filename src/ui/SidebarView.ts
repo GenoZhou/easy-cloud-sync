@@ -1,9 +1,8 @@
 /**
- * Easy Sync sidebar — last sync, Sync now, conflict list, backups.
- * This is the only status surface (no status bar).
+ * Easy Sync sidebar — compact ops surface (no status bar).
  *
- * Conflicts: list unresolved paths; Show diff opens a dedicated page where
- * the user reviews hunks and resolves that file.
+ * Status + counts on one line; Sync/Backup are buttons only; each conflict
+ * row is path + Show diff, with a one-line meta summary.
  */
 
 import { ItemView, Notice, WorkspaceLeaf } from 'obsidian';
@@ -97,32 +96,24 @@ export class EasySyncSidebarView extends ItemView {
 
 	private renderLastSync(container: HTMLElement): void {
 		const section = container.createDiv({ cls: 'easy-sync-section' });
-		section.createEl('h3', { text: 'Last sync' });
-
 		const summary = this.plugin.getLastSyncSummary();
-		const body = section.createDiv({ cls: 'easy-sync-last-sync' });
 
-		body.createEl('p', {
+		const statusParts = [statusLabel(summary)];
+		if (summary.completedAt) {
+			statusParts.push(new Date(summary.completedAt).toLocaleString());
+		}
+		section.createEl('p', {
 			cls: 'easy-sync-status-line',
-			text: statusLabel(summary),
+			text: statusParts.join(' · '),
 		});
 
-		if (summary.completedAt) {
-			body.createEl('p', {
-				cls: 'easy-sync-muted',
-				text: new Date(summary.completedAt).toLocaleString(),
-			});
-		}
-
-		const stats = body.createDiv({ cls: 'easy-sync-stat-grid' });
-		addStat(stats, 'Uploaded', summary.filesUploaded);
-		addStat(stats, 'Downloaded', summary.filesDownloaded);
-		addStat(stats, 'Deleted', summary.filesDeleted);
-		addStat(stats, 'Conflicts', summary.conflictCount);
-		addStat(stats, 'Skipped', summary.filesSkipped);
+		section.createEl('p', {
+			cls: 'easy-sync-muted easy-sync-stat-line',
+			text: formatStatLine(summary, this.conflicts.length),
+		});
 
 		if (summary.lastError) {
-			body.createEl('p', {
+			section.createEl('p', {
 				cls: 'easy-sync-error',
 				text: summary.lastError,
 			});
@@ -131,7 +122,6 @@ export class EasySyncSidebarView extends ItemView {
 
 	private renderSyncActions(container: HTMLElement): void {
 		const section = container.createDiv({ cls: 'easy-sync-section' });
-		section.createEl('h3', { text: 'Sync' });
 		const syncBtn = section.createEl('button', {
 			text: 'Sync now',
 			cls: 'easy-sync-btn easy-sync-btn-primary',
@@ -143,7 +133,6 @@ export class EasySyncSidebarView extends ItemView {
 
 	private renderConflicts(container: HTMLElement): void {
 		const section = container.createDiv({ cls: 'easy-sync-section' });
-		section.createEl('h3', { text: 'Conflicts' });
 
 		if (this.conflicts.length === 0) {
 			section.createEl('p', {
@@ -155,38 +144,38 @@ export class EasySyncSidebarView extends ItemView {
 
 		section.createEl('p', {
 			cls: 'easy-sync-muted',
-			text: `${this.conflicts.length} unresolved · Open Show diff to review and resolve each file.`,
+			text:
+				this.conflicts.length === 1
+					? '1 conflict'
+					: `${this.conflicts.length} conflicts`,
 		});
 
 		const list = section.createEl('ul', { cls: 'easy-sync-conflict-list' });
 		for (const conflict of this.conflicts) {
 			const item = list.createEl('li', { cls: 'easy-sync-conflict-item' });
-			item.createDiv({
+
+			const row = item.createDiv({ cls: 'easy-sync-conflict-row' });
+			row.createDiv({
 				cls: 'easy-sync-conflict-path',
 				text: conflict.path,
 			});
-
-			const meta = item.createDiv({ cls: 'easy-sync-conflict-meta' });
-			meta.createEl('p', {
-				text: `On this device · ${formatConflictSideMeta(conflict, 'device')}`,
-			});
-			meta.createEl('p', {
-				text: `In the cloud · ${formatConflictSideMeta(conflict, 'cloud')}`,
-			});
-
-			const showDiff = item.createEl('button', {
+			const showDiff = row.createEl('button', {
 				text: 'Show diff',
-				cls: 'easy-sync-btn easy-sync-btn-secondary',
+				cls: 'easy-sync-btn easy-sync-btn-ghost easy-sync-btn-inline',
 			});
 			showDiff.addEventListener('click', () => {
 				void this.plugin.openConflictDiff(conflict.path);
+			});
+
+			item.createDiv({
+				cls: 'easy-sync-conflict-meta-line',
+				text: `Device ${formatConflictSideMeta(conflict, 'device')} · Cloud ${formatConflictSideMeta(conflict, 'cloud')}`,
 			});
 		}
 	}
 
 	private renderBackups(container: HTMLElement): void {
 		const section = container.createDiv({ cls: 'easy-sync-section' });
-		section.createEl('h3', { text: 'Backups' });
 
 		const backupBtn = section.createEl('button', {
 			text: 'Backup now',
@@ -244,10 +233,11 @@ export class EasySyncSidebarView extends ItemView {
 	}
 }
 
-function addStat(parent: HTMLElement, label: string, value: number): void {
-	const cell = parent.createDiv({ cls: 'easy-sync-stat' });
-	cell.createSpan({ cls: 'easy-sync-stat-value', text: String(value) });
-	cell.createSpan({ cls: 'easy-sync-stat-label', text: label });
+function formatStatLine(summary: LastSyncSummary, openConflictCount: number): string {
+	return (
+		`\u2191${summary.filesUploaded} \u2193${summary.filesDownloaded} \u00d7${summary.filesDeleted}` +
+		` · ${openConflictCount} conflicts · ${summary.filesSkipped} skipped`
+	);
 }
 
 function statusLabel(summary: LastSyncSummary): string {

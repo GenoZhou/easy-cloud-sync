@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { buildUnifiedHunks, flattenHunksForDisplay } from '../src/utils/textDiff';
+import {
+	buildUnifiedHunks,
+	collapseContextRuns,
+	flattenHunksForDisplay,
+} from '../src/utils/textDiff';
 
 describe('buildUnifiedHunks', () => {
 	it('returns identical for the same text', () => {
@@ -37,5 +41,33 @@ describe('buildUnifiedHunks', () => {
 		const flat = flattenHunksForDisplay(hunks, 10);
 		assert.equal(flat.lines.length, 10);
 		assert.ok(flat.omitted > 0);
+	});
+});
+
+describe('collapseContextRuns', () => {
+	it('folds consecutive identical context lines', () => {
+		const items = collapseContextRuns([
+			{ kind: 'context', text: 'a' },
+			{ kind: 'context', text: 'b' },
+			{ kind: 'del', text: 'old' },
+			{ kind: 'add', text: 'new' },
+			{ kind: 'context', text: 'c' },
+		]);
+		assert.deepEqual(items, [
+			{ type: 'fold', count: 2 },
+			{ type: 'line', line: { kind: 'del', text: 'old' } },
+			{ type: 'line', line: { kind: 'add', text: 'new' } },
+			{ type: 'fold', count: 1 },
+		]);
+	});
+
+	it('passes through add/del-only lists unchanged in structure', () => {
+		const items = collapseContextRuns([
+			{ kind: 'del', text: 'x' },
+			{ kind: 'add', text: 'y' },
+		]);
+		assert.equal(items.length, 2);
+		assert.equal(items[0]?.type, 'line');
+		assert.equal(items[1]?.type, 'line');
 	});
 });
