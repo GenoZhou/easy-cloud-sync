@@ -13,6 +13,7 @@ export default defineConfig(
 		'package.json',
 		'package-lock.json',
 		'tsconfig.json',
+		'src/shims/**',
 	]),
 	{
 		languageOptions: {
@@ -29,4 +30,14 @@ export default defineConfig(
 		},
 	},
 	...obsidianmd.configs.recommended,
+	{
+		rules: {
+			// Plan requires stable IDs `easy-sync-*` and brand casing "Easy Sync".
+			'obsidianmd/commands/no-plugin-id-in-command-id': 'off',
+			'obsidianmd/commands/no-plugin-name-in-command-name': 'off',
+			'obsidianmd/ui/sentence-case': 'off',
+			// Settings search API is optional for v1; connection settings stay imperative.
+			'obsidianmd/settings-tab/prefer-setting-definitions': 'off',
+		},
+	},
 );

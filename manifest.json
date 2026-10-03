@@ -1,11 +1,10 @@
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
+	"id": "easy-sync",
+	"name": "Easy Sync",
 	"version": "1.0.0",
-	"minAppVersion": "1.0.0",
-	"description": "Demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
+	"minAppVersion": "1.8.7",
+	"description": "Sync your vault to AWS S3, Cloudflare R2, or any S3-compatible storage, with manual snapshot backups and clear conflict resolution.",
+	"author": "GenoZhou",
+	"authorUrl": "https://github.com/GenoZhou",
 	"isDesktopOnly": false
 }
