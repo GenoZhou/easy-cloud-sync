@@ -29,6 +29,7 @@ import { BackupDownloader } from './backup/BackupDownloader';
 import { RetentionManager } from './backup/RetentionManager';
 import { getOrCreateDeviceId } from './utils/deviceId';
 import { ConflictResolver } from './ui/ConflictResolver';
+import { ConflictDiffView, EASY_SYNC_DIFF_VIEW_TYPE } from './ui/ConflictDiffView';
 import { EasySyncSidebarView, EASY_SYNC_VIEW_TYPE } from './ui/SidebarView';
 
 /** Journal metadata key for durable last-sync sidebar summary (JSON string). */
@@ -121,6 +122,7 @@ export default class EasySyncPlugin extends Plugin {
 		);
 
 		this.registerView(EASY_SYNC_VIEW_TYPE, (leaf) => new EasySyncSidebarView(leaf, this));
+		this.registerView(EASY_SYNC_DIFF_VIEW_TYPE, (leaf) => new ConflictDiffView(leaf, this));
 
 		this.addRibbonIcon('refresh-cw', 'Open Easy Sync', () => {
 			void this.activateSidebar();
@@ -148,9 +150,11 @@ export default class EasySyncPlugin extends Plugin {
 	async loadSettings(): Promise<void> {
 		const loaded = ((await this.loadData()) ?? {}) as Partial<EasySyncSettings> & {
 			secretAccessKey?: string;
+			conflictFolder?: string;
 		};
-		// Unpublished: drop any legacy plaintext secret; no migration path.
+		// Unpublished: drop legacy plaintext secret and unused Keep-both folder.
 		delete loaded.secretAccessKey;
+		delete loaded.conflictFolder;
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded);
 	}
 
@@ -316,6 +320,36 @@ export default class EasySyncPlugin extends Plugin {
 		}
 	}
 
+	/** Open the dedicated conflict-diff page for one vault path. */
+	async openConflictDiff(path: string): Promise<void> {
+		const { workspace } = this.app;
+		let leaf = workspace.getLeavesOfType(EASY_SYNC_DIFF_VIEW_TYPE)[0];
+		if (!leaf) {
+			leaf = workspace.getLeaf('tab');
+			// Create the view without loading a path — openPath owns path + preview fetch.
+			await leaf.setViewState({
+				type: EASY_SYNC_DIFF_VIEW_TYPE,
+				active: true,
+			});
+		}
+		await workspace.revealLeaf(leaf);
+		const view = leaf.view;
+		if (view instanceof ConflictDiffView) {
+			await view.openPath(path);
+			return;
+		}
+		await leaf.setViewState({
+			type: EASY_SYNC_DIFF_VIEW_TYPE,
+			active: true,
+			state: { path },
+		});
+	}
+
+	/** Refresh sidebar after conflict resolve or sync status changes. */
+	refreshConflictUi(): void {
+		this.refreshSidebar();
+	}
+
 	private refreshSidebar(): void {
 		for (const leaf of this.app.workspace.getLeavesOfType(EASY_SYNC_VIEW_TYPE)) {
 			const view = leaf.view;
@@ -375,6 +409,14 @@ export default class EasySyncPlugin extends Plugin {
 
 	getS3Provider(): S3Provider | null {
 		return this.s3Provider;
+	}
+
+	getPathCodec(): SyncPathCodec | null {
+		return this.pathCodec;
+	}
+
+	getPayloadCodec(): SyncPayloadCodec | null {
+		return this.payloadCodec;
 	}
 }
 

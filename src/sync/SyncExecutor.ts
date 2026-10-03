@@ -440,7 +440,7 @@ export class SyncExecutor {
 	 * Record an unresolved conflict without creating LOCAL_/REMOTE_ artifact files.
 	 *
 	 * Device and cloud versions stay in place until the user resolves via the
-	 * conflict modal (Keep on this device / Keep in the cloud / Keep both / Skip).
+	 * conflict diff page (Keep on this device / Keep in the cloud / Skip).
 	 */
 	private async executeConflict(item: SyncPlanItem): Promise<void> {
 		const mode: ConflictMode = item.conflictMode ?? 'both';

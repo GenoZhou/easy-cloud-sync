@@ -7,9 +7,8 @@ Obsidian community plugin that syncs your vault to **AWS S3**, **Cloudflare R2**
 - Bi-directional sync with a three-way journal (IndexedDB baselines)
 - Providers: AWS S3, Cloudflare R2, Other S3-compatible (custom endpoint + force path style)
 - Sync on startup, on an interval (1–30 minutes, default 5), and via **Sync now**
-- Sidebar ops surface: last sync summary, conflicts, backups
-- Conflict modal: **On this device** / **In the cloud** — Keep on this device / Keep in the cloud / Keep both / Skip
-- Keep both → `name (conflict YYYY-MM-DD).ext`
+- Sidebar ops surface: last sync summary, conflict list, backups
+- Conflicts: sidebar lists unresolved paths; **Show diff** opens a dedicated page with inline hunks (− device / + cloud) and per-file resolve actions (Keep on this device / Keep in the cloud / Skip)
 - Manual backups under a backup prefix; retain newest 5; Download zip; Restore (overwrite same paths only)
 
 ## Privacy & security

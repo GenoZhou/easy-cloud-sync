@@ -1,8 +1,8 @@
 /**
- * Conflict resolution — Keep on this device / Keep in the cloud / Keep both / Skip.
+ * Conflict resolution — Keep on this device / Keep in the cloud / Skip.
  *
- * Keep both writes the non-primary copy as `name (conflict YYYY-MM-DD).ext`.
- * No LOCAL_/REMOTE_ prefixes.
+ * Versions stay in place (device file + cloud object) until the user picks a side.
+ * No LOCAL_/REMOTE_ prefixes; no Keep-both sibling copies.
  */
 
 import { App, TFile } from 'obsidian';
@@ -11,32 +11,10 @@ import { S3Provider } from '../storage/S3Provider';
 import { SyncJournal } from '../sync/SyncJournal';
 import { SyncPathCodec } from '../sync/SyncPathCodec';
 import { SyncPayloadCodec } from '../sync/SyncPayloadCodec';
-import { getDirectory, getExtension, getFilename } from '../utils/paths';
 import { getVaultFileKind, readVaultFile, toArrayBuffer } from '../utils/vaultFiles';
 import { encodeMetadata } from '../sync/SyncObjectMetadata';
 
-export type ConflictResolution =
-	| 'keep-device'
-	| 'keep-cloud'
-	| 'keep-both'
-	| 'skip';
-
-function filenameWithoutExtension(path: string): string {
-	const filename = getFilename(path);
-	const lastDot = filename.lastIndexOf('.');
-	return lastDot > 0 ? filename.substring(0, lastDot) : filename;
-}
-
-function conflictDatedPath(originalPath: string, date = new Date()): string {
-	const dir = getDirectory(originalPath);
-	const base = filenameWithoutExtension(originalPath);
-	const ext = getExtension(originalPath);
-	const yyyy = date.getFullYear();
-	const mm = String(date.getMonth() + 1).padStart(2, '0');
-	const dd = String(date.getDate()).padStart(2, '0');
-	const stamped = `${base} (conflict ${yyyy}-${mm}-${dd})${ext ? `.${ext}` : ''}`;
-	return dir ? `${dir}/${stamped}` : stamped;
-}
+export type ConflictResolution = 'keep-device' | 'keep-cloud' | 'skip';
 
 export class ConflictResolver {
 	constructor(
@@ -64,9 +42,6 @@ export class ConflictResolver {
 				break;
 			case 'keep-cloud':
 				await this.keepCloud(path);
-				break;
-			case 'keep-both':
-				await this.keepBoth(path);
 				break;
 		}
 	}
@@ -139,39 +114,6 @@ export class ConflictResolver {
 			lastSyncedAt: Date.now(),
 		};
 		await this.journal.setStateRecord(record);
-		await this.journal.deleteConflict(path);
-	}
-
-	/**
-	 * Keep device content at the original path; write cloud content to a dated
-	 * conflict sibling; upload the device version.
-	 */
-	private async keepBoth(path: string): Promise<void> {
-		const remoteKey = this.pathCodec.localToRemote(path);
-		const downloaded = await this.s3Provider.downloadFileWithMetadata(remoteKey);
-		const file = this.app.vault.getAbstractFileByPath(path);
-
-		if (downloaded) {
-			const datedPath = conflictDatedPath(path);
-			const plaintext = this.payloadCodec.decodeAfterDownload(
-				downloaded.content,
-				downloaded.payloadFormat,
-			);
-			const kind = getVaultFileKind(path);
-			await this.writeLocalFile(
-				datedPath,
-				kind === 'text' ? new TextDecoder().decode(plaintext) : plaintext,
-			);
-		}
-
-		if (file instanceof TFile) {
-			await this.uploadLocal(file);
-		} else if (downloaded) {
-			// No device file — adopt cloud at original path instead
-			await this.keepCloud(path);
-			return;
-		}
-
 		await this.journal.deleteConflict(path);
 	}
 

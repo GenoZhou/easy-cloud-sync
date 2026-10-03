@@ -1,14 +1,17 @@
 /**
- * Easy Sync sidebar — last sync, Sync now, conflicts, backups.
+ * Easy Sync sidebar — last sync, Sync now, conflict list, backups.
  * This is the only status surface (no status bar).
+ *
+ * Conflicts: list unresolved paths; Show diff opens a dedicated page where
+ * the user reviews hunks and resolves that file.
  */
 
 import { ItemView, Notice, WorkspaceLeaf } from 'obsidian';
 import type EasySyncPlugin from '../main';
 import { BackupInfo, ConflictRecord, LastSyncSummary } from '../types';
 import { isConnectionConfigured } from '../storage/S3Config';
-import { ConflictModal } from './ConflictModal';
 import { restoreBackupWithConfirm } from '../backup/BackupRestore';
+import { formatConflictSideMeta } from './conflictPreview';
 
 export const EASY_SYNC_VIEW_TYPE = 'easy-sync-sidebar';
 
@@ -72,7 +75,7 @@ export class EasySyncSidebarView extends ItemView {
 			});
 			const openSettings = cta.createEl('button', {
 				text: 'Open settings',
-				cls: 'mod-cta',
+				cls: 'easy-sync-btn easy-sync-btn-primary',
 			});
 			openSettings.addEventListener('click', () => {
 				const setting = (
@@ -100,21 +103,23 @@ export class EasySyncSidebarView extends ItemView {
 		const body = section.createDiv({ cls: 'easy-sync-last-sync' });
 
 		body.createEl('p', {
-			text: `Status: ${statusLabel(summary)}`,
+			cls: 'easy-sync-status-line',
+			text: statusLabel(summary),
 		});
 
 		if (summary.completedAt) {
 			body.createEl('p', {
-				text: `Time: ${new Date(summary.completedAt).toLocaleString()}`,
+				cls: 'easy-sync-muted',
+				text: new Date(summary.completedAt).toLocaleString(),
 			});
 		}
 
-		body.createEl('p', {
-			text:
-				`Uploaded ${summary.filesUploaded} · Downloaded ${summary.filesDownloaded} · ` +
-				`Deleted ${summary.filesDeleted} · Conflicts ${summary.conflictCount} · ` +
-				`Skipped ${summary.filesSkipped}`,
-		});
+		const stats = body.createDiv({ cls: 'easy-sync-stat-grid' });
+		addStat(stats, 'Uploaded', summary.filesUploaded);
+		addStat(stats, 'Downloaded', summary.filesDownloaded);
+		addStat(stats, 'Deleted', summary.filesDeleted);
+		addStat(stats, 'Conflicts', summary.conflictCount);
+		addStat(stats, 'Skipped', summary.filesSkipped);
 
 		if (summary.lastError) {
 			body.createEl('p', {
@@ -127,8 +132,10 @@ export class EasySyncSidebarView extends ItemView {
 	private renderSyncActions(container: HTMLElement): void {
 		const section = container.createDiv({ cls: 'easy-sync-section' });
 		section.createEl('h3', { text: 'Sync' });
-		const row = section.createDiv({ cls: 'easy-sync-actions' });
-		const syncBtn = row.createEl('button', { text: 'Sync now', cls: 'mod-cta' });
+		const syncBtn = section.createEl('button', {
+			text: 'Sync now',
+			cls: 'easy-sync-btn easy-sync-btn-primary',
+		});
 		syncBtn.addEventListener('click', () => {
 			void this.plugin.triggerManualSync().then(() => this.refresh());
 		});
@@ -136,9 +143,7 @@ export class EasySyncSidebarView extends ItemView {
 
 	private renderConflicts(container: HTMLElement): void {
 		const section = container.createDiv({ cls: 'easy-sync-section' });
-		section.createEl('h3', {
-			text: `Conflicts (${this.conflicts.length})`,
-		});
+		section.createEl('h3', { text: 'Conflicts' });
 
 		if (this.conflicts.length === 0) {
 			section.createEl('p', {
@@ -148,22 +153,33 @@ export class EasySyncSidebarView extends ItemView {
 			return;
 		}
 
+		section.createEl('p', {
+			cls: 'easy-sync-muted',
+			text: `${this.conflicts.length} unresolved · Open Show diff to review and resolve each file.`,
+		});
+
 		const list = section.createEl('ul', { cls: 'easy-sync-conflict-list' });
 		for (const conflict of this.conflicts) {
-			const item = list.createEl('li');
-			const link = item.createEl('button', {
+			const item = list.createEl('li', { cls: 'easy-sync-conflict-item' });
+			item.createDiv({
+				cls: 'easy-sync-conflict-path',
 				text: conflict.path,
-				cls: 'easy-sync-conflict-link',
 			});
-			link.addEventListener('click', () => {
-				const resolver = this.plugin.getConflictResolver();
-				if (!resolver) {
-					new Notice('Sync system not ready');
-					return;
-				}
-				new ConflictModal(this.app, resolver, conflict, () => {
-					void this.refresh();
-				}).open();
+
+			const meta = item.createDiv({ cls: 'easy-sync-conflict-meta' });
+			meta.createEl('p', {
+				text: `On this device · ${formatConflictSideMeta(conflict, 'device')}`,
+			});
+			meta.createEl('p', {
+				text: `In the cloud · ${formatConflictSideMeta(conflict, 'cloud')}`,
+			});
+
+			const showDiff = item.createEl('button', {
+				text: 'Show diff',
+				cls: 'easy-sync-btn easy-sync-btn-secondary',
+			});
+			showDiff.addEventListener('click', () => {
+				void this.plugin.openConflictDiff(conflict.path);
 			});
 		}
 	}
@@ -172,8 +188,10 @@ export class EasySyncSidebarView extends ItemView {
 		const section = container.createDiv({ cls: 'easy-sync-section' });
 		section.createEl('h3', { text: 'Backups' });
 
-		const actions = section.createDiv({ cls: 'easy-sync-actions' });
-		const backupBtn = actions.createEl('button', { text: 'Backup now', cls: 'mod-cta' });
+		const backupBtn = section.createEl('button', {
+			text: 'Backup now',
+			cls: 'easy-sync-btn easy-sync-btn-primary',
+		});
 		backupBtn.addEventListener('click', () => {
 			void this.plugin.triggerManualBackup().then(() => this.refresh());
 		});
@@ -193,9 +211,12 @@ export class EasySyncSidebarView extends ItemView {
 				cls: 'easy-sync-backup-meta',
 				text: `${new Date(backup.timestamp).toLocaleString()} · ${backup.fileCount} files`,
 			});
-			const row = item.createDiv({ cls: 'easy-sync-backup-actions' });
+			const row = item.createDiv({ cls: 'easy-sync-btn-row' });
 
-			const downloadBtn = row.createEl('button', { text: 'Download' });
+			const downloadBtn = row.createEl('button', {
+				text: 'Download',
+				cls: 'easy-sync-btn easy-sync-btn-secondary',
+			});
 			downloadBtn.addEventListener('click', () => {
 				void this.plugin
 					.getBackupDownloader()
@@ -207,7 +228,10 @@ export class EasySyncSidebarView extends ItemView {
 					});
 			});
 
-			const restoreBtn = row.createEl('button', { text: 'Restore' });
+			const restoreBtn = row.createEl('button', {
+				text: 'Restore',
+				cls: 'easy-sync-btn easy-sync-btn-secondary',
+			});
 			restoreBtn.addEventListener('click', () => {
 				const downloader = this.plugin.getBackupDownloader();
 				if (!downloader) {
@@ -218,6 +242,12 @@ export class EasySyncSidebarView extends ItemView {
 			});
 		}
 	}
+}
+
+function addStat(parent: HTMLElement, label: string, value: number): void {
+	const cell = parent.createDiv({ cls: 'easy-sync-stat' });
+	cell.createSpan({ cls: 'easy-sync-stat-value', text: String(value) });
+	cell.createSpan({ cls: 'easy-sync-stat-label', text: label });
 }
 
 function statusLabel(summary: LastSyncSummary): string {
