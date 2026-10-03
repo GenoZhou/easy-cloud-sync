@@ -46,13 +46,18 @@ export function buildUnifiedHunks(
 	const deviceLines = deviceRaw.slice(0, MAX_LINES_PER_SIDE);
 	const cloudLines = cloudRaw.slice(0, MAX_LINES_PER_SIDE);
 
-	if (deviceLines.length === cloudLines.length && deviceLines.every((l, i) => l === cloudLines[i])) {
-		return { hunks: [], truncated, identical: true };
+	const prefixesEqual =
+		deviceLines.length === cloudLines.length &&
+		deviceLines.every((line, i) => line === cloudLines[i]);
+
+	if (prefixesEqual) {
+		// Truncated equal prefixes must NOT report identical — unread tails may differ.
+		return { hunks: [], truncated, identical: !truncated };
 	}
 
 	const edits = myersDiff(deviceLines, cloudLines);
 	const hunks = groupIntoHunks(edits, context);
-	return { hunks, truncated, identical: hunks.length === 0 };
+	return { hunks, truncated, identical: !truncated && hunks.length === 0 };
 }
 
 /** Flatten hunks for display, capping total rendered lines. */

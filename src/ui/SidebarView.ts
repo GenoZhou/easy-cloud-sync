@@ -23,6 +23,8 @@ export class EasySyncSidebarView extends ItemView {
 	private previewLoading = false;
 	private previewPath: string | null = null;
 	private resolving = false;
+	/** Session cache so Prev/Next does not re-download cloud bodies. */
+	private previewCache = new Map<string, ConflictPreview>();
 
 	constructor(leaf: WorkspaceLeaf, plugin: EasySyncPlugin) {
 		super(leaf);
@@ -55,6 +57,12 @@ export class EasySyncSidebarView extends ItemView {
 			if (this.conflictIndex >= this.conflicts.length) {
 				this.conflictIndex = Math.max(0, this.conflicts.length - 1);
 			}
+			const livePaths = new Set(this.conflicts.map((c) => c.path));
+			for (const path of this.previewCache.keys()) {
+				if (!livePaths.has(path)) {
+					this.previewCache.delete(path);
+				}
+			}
 			try {
 				this.backups = (await this.plugin.getRetentionManager()?.listBackups()) ?? [];
 				this.backups = this.backups.slice(0, 5);
@@ -67,6 +75,7 @@ export class EasySyncSidebarView extends ItemView {
 			this.conflictIndex = 0;
 			this.preview = null;
 			this.previewPath = null;
+			this.previewCache.clear();
 		}
 		this.render();
 		void this.ensureConflictPreview();
@@ -179,11 +188,7 @@ export class EasySyncSidebarView extends ItemView {
 		});
 		prev.disabled = this.conflictIndex <= 0;
 		prev.addEventListener('click', () => {
-			this.conflictIndex -= 1;
-			this.preview = null;
-			this.previewPath = null;
-			this.render();
-			void this.ensureConflictPreview();
+			this.showConflictAt(this.conflictIndex - 1);
 		});
 		const next = pager.createEl('button', {
 			text: 'Next',
@@ -191,11 +196,7 @@ export class EasySyncSidebarView extends ItemView {
 		});
 		next.disabled = this.conflictIndex >= this.conflicts.length - 1;
 		next.addEventListener('click', () => {
-			this.conflictIndex += 1;
-			this.preview = null;
-			this.previewPath = null;
-			this.render();
-			void this.ensureConflictPreview();
+			this.showConflictAt(this.conflictIndex + 1);
 		});
 
 		card.createEl('p', {
@@ -225,10 +226,15 @@ export class EasySyncSidebarView extends ItemView {
 		}
 
 		const nav = card.createDiv({ cls: 'easy-sync-btn-row' });
+		const deviceAvailable =
+			this.preview?.path === conflict.path
+				? this.preview.deviceAvailable
+				: this.app.vault.getAbstractFileByPath(conflict.path) instanceof TFile;
 		const openBtn = nav.createEl('button', {
-			text: 'Open file',
+			text: deviceAvailable ? 'Open file' : 'Not on device',
 			cls: 'easy-sync-btn easy-sync-btn-secondary',
 		});
+		openBtn.disabled = !deviceAvailable;
 		openBtn.addEventListener('click', () => {
 			void this.openConflictFile(conflict.path);
 		});
@@ -304,18 +310,32 @@ export class EasySyncSidebarView extends ItemView {
 		});
 	}
 
+	private showConflictAt(index: number): void {
+		if (index < 0 || index >= this.conflicts.length) return;
+		this.conflictIndex = index;
+		const path = this.conflicts[index]!.path;
+		const cached = this.previewCache.get(path);
+		this.preview = cached ?? null;
+		this.previewPath = cached ? path : null;
+		this.previewLoading = !cached;
+		this.render();
+		if (!cached) {
+			void this.ensureConflictPreview();
+		}
+	}
+
 	private async resolveCurrent(resolution: ConflictResolution): Promise<void> {
 		const conflict = this.conflicts[this.conflictIndex];
 		if (!conflict) return;
 
 		if (resolution === 'skip') {
-			if (this.conflictIndex < this.conflicts.length - 1) {
-				this.conflictIndex += 1;
+			if (this.conflicts.length <= 1) {
+				new Notice('Conflict kept for later. Resolve when ready.');
+				return;
 			}
-			this.preview = null;
-			this.previewPath = null;
-			this.render();
-			void this.ensureConflictPreview();
+			const nextIndex = (this.conflictIndex + 1) % this.conflicts.length;
+			new Notice('Skipped — still unresolved. Showing next conflict.');
+			this.showConflictAt(nextIndex);
 			return;
 		}
 
@@ -329,6 +349,7 @@ export class EasySyncSidebarView extends ItemView {
 		this.render();
 		try {
 			await resolver.resolve(conflict.path, resolution);
+			this.previewCache.delete(conflict.path);
 			new Notice(`Conflict resolved: ${conflict.path}`);
 			await this.refresh();
 		} catch (error) {
@@ -344,7 +365,7 @@ export class EasySyncSidebarView extends ItemView {
 	private async openConflictFile(path: string): Promise<void> {
 		const file = this.app.vault.getAbstractFileByPath(path);
 		if (!(file instanceof TFile)) {
-			new Notice('File is not on this device');
+			new Notice('This file is not on this device');
 			return;
 		}
 		await this.app.workspace.getLeaf(false).openFile(file);
@@ -355,9 +376,25 @@ export class EasySyncSidebarView extends ItemView {
 		if (!conflict) {
 			this.preview = null;
 			this.previewPath = null;
+			this.previewLoading = false;
 			return;
 		}
-		if (this.previewPath === conflict.path && this.preview) {
+
+		const path = conflict.path;
+		const cached = this.previewCache.get(path);
+		if (cached) {
+			if (this.preview === cached && this.previewPath === path && !this.previewLoading) {
+				return;
+			}
+			this.preview = cached;
+			this.previewPath = path;
+			this.previewLoading = false;
+			this.render();
+			return;
+		}
+
+		// Already loading this path — avoid a second render flash.
+		if (this.previewLoading && this.previewPath === path && !this.preview) {
 			return;
 		}
 
@@ -368,9 +405,9 @@ export class EasySyncSidebarView extends ItemView {
 			return;
 		}
 
-		const path = conflict.path;
 		this.previewLoading = true;
 		this.previewPath = path;
+		this.preview = null;
 		this.render();
 
 		try {
@@ -382,21 +419,25 @@ export class EasySyncSidebarView extends ItemView {
 				conflict,
 			);
 			if (this.previewPath !== path) return;
+			this.previewCache.set(path, preview);
 			this.preview = preview;
 		} catch (error) {
 			if (this.previewPath !== path) return;
 			const message = error instanceof Error ? error.message : 'Failed to load diff';
-			this.preview = {
+			const failed: ConflictPreview = {
 				kind: 'unavailable',
 				path,
 				deviceMeta: formatConflictMeta(conflict, 'device'),
 				cloudMeta: formatConflictMeta(conflict, 'cloud'),
+				deviceAvailable: this.app.vault.getAbstractFileByPath(path) instanceof TFile,
 				diffLines: [],
 				omittedDiffLines: 0,
 				truncatedInput: false,
 				identical: false,
 				message,
 			};
+			this.previewCache.set(path, failed);
+			this.preview = failed;
 		} finally {
 			this.previewLoading = false;
 			if (this.previewPath === path) {

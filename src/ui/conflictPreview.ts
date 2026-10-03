@@ -14,6 +14,9 @@ import {
 	flattenHunksForDisplay,
 } from '../utils/textDiff';
 
+/** Skip full-body download/diff when either side exceeds this (bytes). */
+export const MAX_INLINE_PREVIEW_BYTES = 512 * 1024;
+
 export type ConflictPreviewKind = 'text' | 'binary' | 'unavailable';
 
 export interface ConflictPreview {
@@ -21,6 +24,7 @@ export interface ConflictPreview {
 	path: string;
 	deviceMeta: string;
 	cloudMeta: string;
+	deviceAvailable: boolean;
 	/** Unified changed lines (device = del / cloud = add). */
 	diffLines: DiffLine[];
 	omittedDiffLines: number;
@@ -51,6 +55,8 @@ export async function loadConflictPreview(
 	const deviceMeta = formatMeta(conflict.deviceMtime, conflict.deviceSize);
 	const cloudMeta = formatMeta(conflict.cloudMtime, conflict.cloudSize);
 	const kind = getVaultFileKind(path);
+	const file = app.vault.getAbstractFileByPath(path);
+	const deviceAvailable = file instanceof TFile;
 
 	if (kind !== 'text') {
 		return {
@@ -58,17 +64,37 @@ export async function loadConflictPreview(
 			path,
 			deviceMeta,
 			cloudMeta,
+			deviceAvailable,
 			diffLines: [],
 			omittedDiffLines: 0,
 			truncatedInput: false,
 			identical: false,
-			message: 'Binary or non-text file — open the note to inspect the device copy.',
+			message: deviceAvailable
+				? 'Binary or non-text file — open the note to inspect the device copy.'
+				: 'Binary or non-text file — not present on this device.',
+		};
+	}
+
+	const knownSize = Math.max(conflict.deviceSize ?? 0, conflict.cloudSize ?? 0);
+	if (knownSize > MAX_INLINE_PREVIEW_BYTES) {
+		return {
+			kind: 'text',
+			path,
+			deviceMeta,
+			cloudMeta,
+			deviceAvailable,
+			diffLines: [],
+			omittedDiffLines: 0,
+			truncatedInput: true,
+			identical: false,
+			message: deviceAvailable
+				? 'File too large for inline diff. Open the file to review.'
+				: 'File too large for inline diff, and it is not on this device.',
 		};
 	}
 
 	let deviceText: string | null = null;
-	const file = app.vault.getAbstractFileByPath(path);
-	if (file instanceof TFile) {
+	if (deviceAvailable) {
 		const content = await readVaultFile(app.vault, file);
 		deviceText = typeof content === 'string' ? content : new TextDecoder().decode(content);
 	}
@@ -78,6 +104,20 @@ export async function loadConflictPreview(
 		const remoteKey = pathCodec.localToRemote(path);
 		const downloaded = await s3.downloadFileWithMetadata(remoteKey);
 		if (downloaded) {
+			if (downloaded.content.byteLength > MAX_INLINE_PREVIEW_BYTES) {
+				return {
+					kind: 'text',
+					path,
+					deviceMeta,
+					cloudMeta,
+					deviceAvailable,
+					diffLines: [],
+					omittedDiffLines: 0,
+					truncatedInput: true,
+					identical: false,
+					message: 'Cloud object too large for inline diff. Open the file if present locally.',
+				};
+			}
 			const plaintext = payloadCodec.decodeAfterDownload(
 				downloaded.content,
 				downloaded.payloadFormat,
@@ -91,6 +131,7 @@ export async function loadConflictPreview(
 			path,
 			deviceMeta,
 			cloudMeta,
+			deviceAvailable,
 			diffLines: [],
 			omittedDiffLines: 0,
 			truncatedInput: false,
@@ -105,6 +146,7 @@ export async function loadConflictPreview(
 			path,
 			deviceMeta,
 			cloudMeta,
+			deviceAvailable: false,
 			diffLines: [],
 			omittedDiffLines: 0,
 			truncatedInput: false,
@@ -116,17 +158,26 @@ export async function loadConflictPreview(
 	const diff = buildUnifiedHunks(deviceText ?? '', cloudText ?? '');
 	const flat = flattenHunksForDisplay(diff.hunks, 48);
 
+	let message: string | undefined;
+	if (diff.identical) {
+		message = 'Contents match (metadata still conflicted). Choose a side to clear.';
+	} else if (diff.truncated && flat.lines.length === 0) {
+		message =
+			'Compared only the first 800 lines (they match). Later lines may still differ — open the file.';
+	} else if (!deviceAvailable) {
+		message = 'Not on this device — showing the cloud copy as additions.';
+	}
+
 	return {
 		kind: 'text',
 		path,
 		deviceMeta,
 		cloudMeta,
+		deviceAvailable,
 		diffLines: flat.lines,
 		omittedDiffLines: flat.omitted,
 		truncatedInput: diff.truncated,
 		identical: diff.identical,
-		message: diff.identical
-			? 'Contents match (metadata still conflicted). Choose a side to clear.'
-			: undefined,
+		message,
 	};
 }
