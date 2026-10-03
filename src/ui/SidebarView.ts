@@ -11,6 +11,7 @@ import type EasySyncPlugin from '../main';
 import { BackupInfo, ConflictRecord, LastSyncSummary } from '../types';
 import { isConnectionConfigured } from '../storage/S3Config';
 import { restoreBackupWithConfirm } from '../backup/BackupRestore';
+import { formatConflictSideMeta } from './conflictPreview';
 
 export const EASY_SYNC_VIEW_TYPE = 'easy-sync-sidebar';
 
@@ -167,10 +168,10 @@ export class EasySyncSidebarView extends ItemView {
 
 			const meta = item.createDiv({ cls: 'easy-sync-conflict-meta' });
 			meta.createEl('p', {
-				text: `On this device · ${formatConflictMeta(conflict, 'device')}`,
+				text: `On this device · ${formatConflictSideMeta(conflict, 'device')}`,
 			});
 			meta.createEl('p', {
-				text: `In the cloud · ${formatConflictMeta(conflict, 'cloud')}`,
+				text: `In the cloud · ${formatConflictSideMeta(conflict, 'cloud')}`,
 			});
 
 			const showDiff = item.createEl('button', {
@@ -247,15 +248,6 @@ function addStat(parent: HTMLElement, label: string, value: number): void {
 	const cell = parent.createDiv({ cls: 'easy-sync-stat' });
 	cell.createSpan({ cls: 'easy-sync-stat-value', text: String(value) });
 	cell.createSpan({ cls: 'easy-sync-stat-label', text: label });
-}
-
-function formatConflictMeta(conflict: ConflictRecord, side: 'device' | 'cloud'): string {
-	const mtime = side === 'device' ? conflict.deviceMtime : conflict.cloudMtime;
-	const size = side === 'device' ? conflict.deviceSize : conflict.cloudSize;
-	const parts: string[] = [];
-	if (mtime !== undefined) parts.push(new Date(mtime).toLocaleString());
-	if (size !== undefined) parts.push(`${size} bytes`);
-	return parts.length > 0 ? parts.join(' · ') : 'Unavailable';
 }
 
 function statusLabel(summary: LastSyncSummary): string {

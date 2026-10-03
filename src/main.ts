@@ -326,24 +326,23 @@ export default class EasySyncPlugin extends Plugin {
 		let leaf = workspace.getLeavesOfType(EASY_SYNC_DIFF_VIEW_TYPE)[0];
 		if (!leaf) {
 			leaf = workspace.getLeaf('tab');
+			// Create the view without loading a path — openPath owns path + preview fetch.
 			await leaf.setViewState({
 				type: EASY_SYNC_DIFF_VIEW_TYPE,
 				active: true,
-				state: { path },
 			});
 		}
 		await workspace.revealLeaf(leaf);
 		const view = leaf.view;
 		if (view instanceof ConflictDiffView) {
-			// Always force a fresh session — setViewState alone may no-op for same path.
 			await view.openPath(path);
-		} else {
-			await leaf.setViewState({
-				type: EASY_SYNC_DIFF_VIEW_TYPE,
-				active: true,
-				state: { path },
-			});
+			return;
 		}
+		await leaf.setViewState({
+			type: EASY_SYNC_DIFF_VIEW_TYPE,
+			active: true,
+			state: { path },
+		});
 	}
 
 	/** Refresh sidebar after conflict resolve or sync status changes. */

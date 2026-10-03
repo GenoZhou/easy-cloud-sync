@@ -57,6 +57,16 @@ function formatMeta(mtime?: number, size?: number): string {
 	return parts.length > 0 ? parts.join(' · ') : 'Unavailable';
 }
 
+/** Device/cloud mtime·size label for conflict list and diff UI. */
+export function formatConflictSideMeta(
+	conflict: ConflictRecord,
+	side: 'device' | 'cloud',
+): string {
+	return side === 'device'
+		? formatMeta(conflict.deviceMtime, conflict.deviceSize)
+		: formatMeta(conflict.cloudMtime, conflict.cloudSize);
+}
+
 export async function loadConflictPreview(
 	app: App,
 	s3: S3Provider,
