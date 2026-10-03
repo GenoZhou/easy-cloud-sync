@@ -2,7 +2,7 @@
  * Conflict resolution modal — On this device / In the cloud.
  */
 
-import { App, Modal, Setting } from 'obsidian';
+import { App, Modal } from 'obsidian';
 import { ConflictRecord } from '../types';
 import { ConflictResolution, ConflictResolver } from './ConflictResolver';
 
@@ -59,7 +59,7 @@ export class ConflictModal extends Modal {
 			text: formatMeta(this.conflict.cloudMtime, this.conflict.cloudSize),
 		});
 
-		const actions = contentEl.createDiv({ cls: 'easy-sync-modal-actions' });
+		const actions = contentEl.createDiv({ cls: 'easy-sync-conflict-actions' });
 
 		const run = async (resolution: ConflictResolution) => {
 			await this.resolver.resolve(this.conflict.path, resolution);
@@ -67,22 +67,29 @@ export class ConflictModal extends Modal {
 			this.onResolved();
 		};
 
-		new Setting(actions)
-			.addButton((btn) =>
-				btn.setButtonText('Keep on this device').setCta().onClick(() => void run('keep-device')),
-			)
-			.addButton((btn) =>
-				btn.setButtonText('Keep in the cloud').onClick(() => void run('keep-cloud')),
-			)
-			.addButton((btn) =>
-				btn
-					.setButtonText('Keep both')
-					.setTooltip('Keeps the device file; saves the cloud copy as name (conflict YYYY-MM-DD).ext')
-					.onClick(() => void run('keep-both')),
-			)
-			.addButton((btn) =>
-				btn.setButtonText('Skip').onClick(() => void run('skip')),
-			);
+		const addAction = (
+			label: string,
+			resolution: ConflictResolution,
+			options?: { cta?: boolean; tooltip?: string },
+		) => {
+			const btn = actions.createEl('button', {
+				text: label,
+				cls: options?.cta ? 'mod-cta' : undefined,
+			});
+			if (options?.tooltip) {
+				btn.setAttr('aria-label', options.tooltip);
+				btn.setAttr('title', options.tooltip);
+			}
+			btn.addEventListener('click', () => void run(resolution));
+		};
+
+		addAction('Keep on this device', 'keep-device', { cta: true });
+		addAction('Keep in the cloud', 'keep-cloud');
+		addAction('Keep both', 'keep-both', {
+			tooltip:
+				'Keeps the device file; saves the cloud copy as name (conflict YYYY-MM-DD).ext',
+		});
+		addAction('Skip', 'skip');
 	}
 
 	onClose(): void {

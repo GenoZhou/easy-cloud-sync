@@ -55,39 +55,55 @@
 
 .easy-sync-conflict-list li,
 .easy-sync-backup-item {
-	margin: 0 0 8px;
-	padding: 8px 0;
+	margin: 0;
+	padding: 0;
 	border-bottom: 1px solid var(--background-modifier-border);
 }
 
+/* Full-width list row — reset Obsidian default button “pill” look. */
 .easy-sync-conflict-link {
-	background: none;
+	display: block;
+	width: 100%;
+	box-sizing: border-box;
+	appearance: none;
+	-webkit-appearance: none;
+	background: transparent;
 	border: none;
-	padding: 0;
+	border-radius: 0;
+	padding: 12px 4px;
+	margin: 0;
 	color: var(--text-accent);
 	cursor: pointer;
 	text-align: left;
 	font: inherit;
-	word-break: break-all;
+	line-height: 1.4;
+	word-break: break-word;
+	overflow-wrap: anywhere;
 }
 
-.easy-sync-conflict-link:hover {
+.easy-sync-conflict-link:hover,
+.easy-sync-conflict-link:focus-visible {
 	text-decoration: underline;
+	background: var(--background-modifier-hover);
 }
 
 .easy-sync-backup-meta {
 	font-size: 0.9em;
-	margin-bottom: 6px;
+	margin: 8px 0 6px;
 }
 
 .easy-sync-backup-actions {
 	display: flex;
+	flex-wrap: wrap;
 	gap: 8px;
+	margin-bottom: 8px;
 }
 
 .easy-sync-conflict-modal .easy-sync-conflict-path {
 	font-family: var(--font-monospace);
-	word-break: break-all;
+	word-break: break-word;
+	overflow-wrap: anywhere;
+	margin: 0 0 8px;
 }
 
 .easy-sync-conflict-versions {
@@ -101,11 +117,36 @@
 	padding: 10px;
 	border: 1px solid var(--background-modifier-border);
 	border-radius: 6px;
+	min-width: 0;
 }
 
 .easy-sync-conflict-version h3 {
 	margin: 0 0 6px;
 	font-size: 0.95em;
+}
+
+.easy-sync-conflict-version p {
+	margin: 0;
+	font-size: 0.85em;
+	color: var(--text-muted);
+	word-break: break-word;
+}
+
+/* Stacked action buttons — readable on narrow mobile modals. */
+.easy-sync-conflict-actions {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin-top: 8px;
+}
+
+.easy-sync-conflict-actions button {
+	width: 100%;
+	justify-content: center;
+	white-space: normal;
+	text-align: center;
+	line-height: 1.3;
+	padding: 10px 12px;
 }
 
 .easy-sync-modal-actions {
@@ -120,8 +161,16 @@
 	font-family: var(--font-monospace);
 }
 
-@media (max-width: 400px) {
+@media (max-width: 520px) {
 	.easy-sync-conflict-versions {
 		grid-template-columns: 1fr;
+	}
+
+	.easy-sync-modal-actions {
+		flex-direction: column;
+	}
+
+	.easy-sync-modal-actions button {
+		width: 100%;
 	}
 }
