@@ -131,8 +131,13 @@ export const en = {
 		syncDone: (up: number, down: number, del: number) =>
 			`Sync completed: ${up} uploaded, ${down} downloaded, ${del} deleted`,
 		startingSync: 'Starting sync…',
+		startingBackup: 'Starting backup…',
 		backupInProgress: 'Backup already in progress…',
 		backupNotReady: 'Backup system not initialized',
+		backupDone: (files: number) => `Backup completed: ${files} files`,
+		backupErrors: (message: string) => `Backup completed with errors: ${message}`,
+		backupFailed: (message: string) => `Backup failed: ${message}`,
+		unknownError: 'Unknown error',
 		journalUnavailable: 'Sync journal is not available',
 		resetLocalStarted: 'Resetting this device from the cloud…',
 		resetCloudStarted: 'Resetting the cloud from this device…',

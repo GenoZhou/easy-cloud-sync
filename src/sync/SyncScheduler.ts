@@ -12,6 +12,7 @@ import { Plugin } from 'obsidian';
 import { SyncEngine } from './SyncEngine';
 import { EasySyncSettings, SyncResult } from '../types';
 import { isConnectionConfigured } from '../storage/S3Config';
+import { allowsAutomaticSync, shouldSkipAutomaticTrigger } from './autoSync';
 
 export class SyncScheduler {
 	private plugin: Plugin;
@@ -54,7 +55,7 @@ export class SyncScheduler {
 		this.isEnabled = true;
 
 		const minutes = this.settings.syncIntervalMinutes;
-		if (minutes <= 0) {
+		if (!allowsAutomaticSync(minutes)) {
 			if (this.settings.debugLogging) {
 				console.debug('[Easy Sync] Scheduler started: manual only (no interval)');
 			}
@@ -107,11 +108,7 @@ export class SyncScheduler {
 			return null;
 		}
 
-		// Manual-only interval: skip startup and scheduled triggers.
-		if (
-			(trigger === 'scheduled' || trigger === 'startup') &&
-			this.settings.syncIntervalMinutes <= 0
-		) {
+		if (shouldSkipAutomaticTrigger(trigger, this.settings.syncIntervalMinutes)) {
 			return null;
 		}
 

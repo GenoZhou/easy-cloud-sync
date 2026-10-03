@@ -30,6 +30,7 @@ import {
 	DESTINATION_FINGERPRINT_KEY,
 	RESET_AUTHORITY_KEY,
 } from './sync/journalKeys';
+import { allowsAutomaticSync } from './sync/autoSync';
 import { SnapshotCreator } from './backup/SnapshotCreator';
 import { BackupDownloader } from './backup/BackupDownloader';
 import { RetentionManager } from './backup/RetentionManager';
@@ -142,7 +143,7 @@ export default class EasySyncPlugin extends Plugin {
 		this.app.workspace.onLayoutReady(() => {
 			if (
 				isConnectionConfigured(this.app, this.settings) &&
-				this.settings.syncIntervalMinutes > 0
+				allowsAutomaticSync(this.settings.syncIntervalMinutes)
 			) {
 				void this.syncScheduler?.triggerSync('startup');
 			}
@@ -219,7 +220,7 @@ export default class EasySyncPlugin extends Plugin {
 				? t().notices.resetLocalStarted
 				: t().notices.resetCloudStarted,
 		);
-		await this.triggerManualSync();
+		await this.triggerManualSync({ skipStartNotice: true });
 	}
 
 	private registerCommands(): void {
@@ -260,7 +261,7 @@ export default class EasySyncPlugin extends Plugin {
 		this.syncScheduler?.stop();
 	}
 
-	async triggerManualSync(): Promise<void> {
+	async triggerManualSync(options?: { skipStartNotice?: boolean }): Promise<void> {
 		if (!isConnectionConfigured(this.app, this.settings)) {
 			new Notice(t().notices.configureBeforeSync);
 			return;
@@ -271,7 +272,9 @@ export default class EasySyncPlugin extends Plugin {
 			return;
 		}
 
-		new Notice(t().notices.startingSync);
+		if (!options?.skipStartNotice) {
+			new Notice(t().notices.startingSync);
+		}
 		const result = await this.syncScheduler?.triggerSync('manual');
 
 		if (!result) {
@@ -315,7 +318,7 @@ export default class EasySyncPlugin extends Plugin {
 			return;
 		}
 
-		new Notice('Starting backup…');
+		new Notice(t().notices.startingBackup);
 		this.isBackupRunning = true;
 
 		try {
@@ -328,14 +331,15 @@ export default class EasySyncPlugin extends Plugin {
 			}
 
 			if (result.success) {
-				new Notice(`Backup completed: ${result.filesBackedUp} files`);
+				new Notice(t().notices.backupDone(result.filesBackedUp));
 			} else {
-				const errorMsg = result.errors[0] ?? 'Unknown error';
-				new Notice(`Backup completed with errors: ${errorMsg}`);
+				const errorMsg = result.errors[0] ?? t().notices.unknownError;
+				new Notice(t().notices.backupErrors(errorMsg));
 			}
 		} catch (error) {
-			const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-			new Notice(`Backup failed: ${errorMessage}`);
+			const errorMessage =
+				error instanceof Error ? error.message : t().notices.unknownError;
+			new Notice(t().notices.backupFailed(errorMessage));
 		} finally {
 			this.isBackupRunning = false;
 			this.refreshSidebar();

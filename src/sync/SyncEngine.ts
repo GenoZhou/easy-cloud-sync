@@ -202,7 +202,6 @@ export class SyncEngine {
 			// Phase 3 — Persist metadata
 			if (result.success) {
 				await this.journal.setMetadata(LAST_SUCCESSFUL_SYNC_KEY, Date.now());
-				await this.journal.deleteMetadata(RESET_AUTHORITY_KEY);
 			}
 
 			this.log(`Sync completed with ${result.errors.length} error(s)`);
@@ -228,6 +227,13 @@ export class SyncEngine {
 				errors: [{ path: '', action: 'skip', message, recoverable: false }],
 			};
 		} finally {
+			// One-shot Advanced reset: always consume so a failed attempt cannot
+			// leave scheduled/startup sync stuck in mass-align mode.
+			try {
+				await this.journal.deleteMetadata(RESET_AUTHORITY_KEY);
+			} catch {
+				/* journal may already be closed during unload */
+			}
 			this.isSyncing = false;
 			this.changeTracker.setSyncInProgress(false);
 		}
