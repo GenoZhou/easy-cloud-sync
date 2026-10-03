@@ -45,7 +45,7 @@ Options:
 Default behavior:
   - The next prerelease number is chosen from local and remote tags.
   - If current version is 1.2.2 and origin has 1.2.3-beta.3, next is 1.2.3-beta.4.
-  - Without --publish, only files are updated and npm run prepublish is executed.
+  - Without --publish, only files are updated and npm run prepublishOnly is executed.
   - With --publish, the script re-checks that the tag does not exist before pushing.
 `);
 }

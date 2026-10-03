@@ -43,7 +43,7 @@ Options:
 Default behavior:
   - If the current version is a prerelease, the stable base is used, e.g. 1.2.7-beta.3 -> 1.2.7.
   - If the current version is stable, patch is bumped, e.g. 1.2.7 -> 1.2.8.
-  - Without --publish, only files are updated and npm run prepublish is executed.
+  - Without --publish, only files are updated and npm run prepublishOnly is executed.
 `);
 }
 
