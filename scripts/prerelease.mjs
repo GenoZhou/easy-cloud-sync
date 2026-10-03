@@ -97,7 +97,7 @@ async function main() {
   }
 
   updateVersions(manifest, packageJson, nextVersion);
-  run("npm", ["run", "prepublish"]);
+  run("npm", ["run", "prepublishOnly"]);
 
   console.log(`\nPrepared prerelease ${nextVersion}`);
 
