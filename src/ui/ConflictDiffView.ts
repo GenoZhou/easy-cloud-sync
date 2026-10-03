@@ -271,13 +271,10 @@ export class ConflictDiffView extends ItemView {
 		await this.closeToSidebar();
 	}
 
-	/** Close this diff leaf, then reveal the sidebar (detach before reveal). */
 	private async closeToSidebar(): Promise<void> {
 		const outcome = await closeConflictDiffToSidebar({
 			refreshConflictUi: () => this.plugin.refreshConflictUi(),
-			detachDiff: () => {
-				this.leaf.detach();
-			},
+			detachDiff: () => this.leaf.detach(),
 			activateSidebar: () => this.plugin.activateSidebar(),
 		});
 

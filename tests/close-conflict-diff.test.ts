@@ -37,7 +37,8 @@ describe('closeConflictDiffToSidebar', () => {
 		assert.equal(outcome.ok, false);
 		if (outcome.ok) assert.fail('expected failure');
 		assert.equal(outcome.step, 'detach');
-		assert.equal((outcome.error as Error).message, 'detach failed');
+		assert.ok(outcome.error instanceof Error);
+		assert.equal(outcome.error.message, 'detach failed');
 		assert.deepEqual(steps, ['refresh', 'detach']);
 	});
 
@@ -80,7 +81,8 @@ describe('closeConflictDiffToSidebar', () => {
 		assert.equal(outcome.ok, false);
 		if (outcome.ok) assert.fail('expected failure');
 		assert.equal(outcome.step, 'activate');
-		assert.equal((outcome.error as Error).message, 'activate failed');
+		assert.ok(outcome.error instanceof Error);
+		assert.equal(outcome.error.message, 'activate failed');
 		assert.deepEqual(steps, ['refresh', 'detach', 'activate', 'activate']);
 	});
 });

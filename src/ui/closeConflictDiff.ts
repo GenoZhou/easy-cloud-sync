@@ -15,10 +15,7 @@ export type CloseConflictDiffOutcome =
 	| { ok: true }
 	| { ok: false; step: 'detach' | 'activate'; error: unknown };
 
-/**
- * Run refresh → detach → activate (one activate retry after the first failure).
- * Callers map outcomes to Notices / reload.
- */
+/** refresh → detach → activate (retry activate once if the first call fails). */
 export async function closeConflictDiffToSidebar(
 	nav: CloseConflictDiffNav,
 ): Promise<CloseConflictDiffOutcome> {
@@ -29,16 +26,14 @@ export async function closeConflictDiffToSidebar(
 		return { ok: false, step: 'detach', error };
 	}
 
-	try {
-		await nav.activateSidebar();
-		return { ok: true };
-	} catch {
-		// Detach already closed the decide surface — retry reveal once.
+	let lastError: unknown;
+	for (let attempt = 0; attempt < 2; attempt++) {
 		try {
 			await nav.activateSidebar();
 			return { ok: true };
 		} catch (error) {
-			return { ok: false, step: 'activate', error };
+			lastError = error;
 		}
 	}
+	return { ok: false, step: 'activate', error: lastError };
 }
