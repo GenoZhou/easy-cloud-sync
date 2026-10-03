@@ -60,7 +60,7 @@ Recommended: Auto-sync on an interval (default 5 minutes) + sync on startup + ma
 Answer: Accept recommendation — startup sync + default 5 min interval (adjustable 1–30) + Sync now command; no disable-sync toggle.
 
 ### Q7: Sidebar role (new requirement)
-Status: open
+Status: answered
 
 User added: a sidebar that shows latest sync details and sync options.
 
@@ -70,23 +70,52 @@ Recommended:
 - Sidebar (primary ops surface): last sync summary (time, result, counts uploaded/downloaded/deleted/conflicts/skipped, short error if any); Sync now; Open conflicts; Backup now; list of last 5 backups (restore/download/delete if needed); interval quick control optional or link to settings.
 - Settings: connection (provider aws|r2|custom, endpoint, region, bucket, keys, forcePathStyle for custom), sync prefix, backup prefix, exclude patterns, sync interval.
 
+Answer: Accept recommendation — sidebar = ops + last sync + backups; Settings = connection + prefixes + excludes + interval.
+
 ### Q8: Conflict entry points
-Status: open
+Status: answered
 
 Given conflict modal (Q5) + sidebar (Q7), how do users discover unresolved conflicts?
 
 Recommended: Sidebar shows conflict count + list of conflicted paths; clicking a row opens the conflict modal. Status bar also shows conflict badge and opens the same sidebar/modal. No LOCAL_/REMOTE_ files unless user chooses Keep both (dated copy).
 
+Answer: Accept recommendation — sidebar conflict list + status bar badge → same modal; Keep both = dated copy only.
+
 ### Q9: Sync scope defaults
-Status: open
+Status: answered
 
 What is synced by default, and which excludes are hard-coded vs configurable?
 
 Recommended: Sync whole vault except hard-exclude plugin `data.json` / own plugin dir secrets; default exclude patterns `**/workspace*`, `.trash/**` (editable in Settings). `.obsidian/**` included except those hard excludes — document credential-leak risk if users add other plugins' data files carelessly. No encryption means bucket contents are readable with keys.
 
+Answer: Accept recommendation — whole vault; hard-exclude plugin secrets; default editable excludes for workspace/trash; `.obsidian/**` in scope with docs warning.
+
 ### Q10: Backup actions in UI
-Status: open
+Status: answered
 
 Manual-only backups with fixed retention of 5. Exact actions?
 
 Recommended: Sidebar section “Backups” lists up to 5 newest snapshots (timestamp + size if cheap); actions: Create backup, Download (zip), Restore into vault (with confirm). Creating a 6th deletes oldest automatically (copies=5, no days retention, no settings). No scheduled backup.
+
+Answer: Accept recommendation — manual Create/Download/Restore; fixed retain 5; no schedule/settings.
+
+### Q11: Conflict version labels
+Status: open
+
+In the conflict modal, how do we label the two versions without “local/remote”?
+
+Recommended: Label by provenance + time — **On this device** (mtime / size) vs **In the cloud** (mtime / size). Actions: Keep on this device / Keep in the cloud / Keep both / Skip. “Keep both” writes `name (conflict YYYY-MM-DD).ext` for the non-chosen-as-primary copy; primary path keeps the selected winner. Avoid LOCAL_/REMOTE_ prefixes and the words local/remote in UI copy.
+
+### Q12: Backup restore semantics
+Status: open
+
+What does Restore do?
+
+Recommended: Confirm modal warning that files present in the snapshot overwrite same vault paths; vault files not in the snapshot are left untouched (no mass delete). Download zip remains the non-destructive option.
+
+### Q13: First-run / incomplete credentials
+Status: open
+
+Sync is always “on”, but credentials may be missing.
+
+Recommended: If connection incomplete, sidebar shows a setup CTA (“Configure S3 connection in Settings”); auto-sync and startup sync no-op quietly (at most one Notice on manual Sync now). No error spam.

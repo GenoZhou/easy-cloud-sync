@@ -28,3 +28,8 @@
 
 - Accept all recommendations Q1–Q6.
 - Additional requirement: sidebar for latest sync details + sync options.
+
+## Round 2 decisions (user)
+
+- Accept all recommendations Q7–Q10 (sidebar ops surface; conflict entry points; sync scope; backup actions).
+
