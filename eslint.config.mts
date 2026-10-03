@@ -14,6 +14,8 @@ export default defineConfig(
 		'package-lock.json',
 		'tsconfig.json',
 		'src/shims/**',
+		// Release helpers are Node scripts, not Obsidian plugin source.
+		'scripts/**',
 	]),
 	{
 		languageOptions: {
