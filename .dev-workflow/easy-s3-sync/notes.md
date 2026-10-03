@@ -23,3 +23,8 @@
 - Config simplify: sync always on.
 - Backup: manual only; UI shows last 5; auto retention beyond 5; no retention knobs.
 - Conflict UX/UI instead of local/remote distinction.
+
+## Round 1 decisions (user)
+
+- Accept all recommendations Q1–Q6.
+- Additional requirement: sidebar for latest sync details + sync options.
