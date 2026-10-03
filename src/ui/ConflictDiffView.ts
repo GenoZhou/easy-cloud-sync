@@ -170,7 +170,7 @@ export class ConflictDiffView extends ItemView {
 			return;
 		}
 
-		// Tab title already shows "Conflict diff" — only keep the path here.
+		// Tab title already shows "Conflict diff" — path + side meta, then actions.
 		contentEl.createEl('p', {
 			cls: 'easy-sync-conflict-path',
 			text: path,
@@ -186,6 +186,10 @@ export class ConflictDiffView extends ItemView {
 			contentEl.createEl('p', { cls: 'easy-sync-muted', text: 'No diff available.' });
 			return;
 		}
+
+		const meta = contentEl.createDiv({ cls: 'easy-sync-diff-meta' });
+		meta.createDiv({ text: `Device ${preview.deviceMeta}` });
+		meta.createDiv({ text: `Cloud ${preview.cloudMeta}` });
 
 		const legend = contentEl.createDiv({ cls: 'easy-sync-diff-legend' });
 		legend.createSpan({ cls: 'easy-sync-diff-del', text: '− device' });

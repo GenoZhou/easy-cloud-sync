@@ -57,7 +57,7 @@ function formatMeta(mtime?: number, size?: number): string {
 	return parts.length > 0 ? parts.join(' · ') : 'Unavailable';
 }
 
-/** Device/cloud mtime·size label for conflict list and diff UI. */
+/** Device/cloud mtime·size label for the conflict-diff page. */
 export function formatConflictSideMeta(
 	conflict: ConflictRecord,
 	side: 'device' | 'cloud',

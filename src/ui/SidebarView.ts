@@ -2,7 +2,7 @@
  * Easy Sync sidebar — compact ops surface (no status bar).
  *
  * Status + counts on one line; Sync/Backup are buttons only; each conflict
- * row is path + Show diff, with a one-line meta summary.
+ * row is path + Show diff (mtime/size live on the diff page).
  */
 
 import { ItemView, Notice, WorkspaceLeaf } from 'obsidian';
@@ -10,7 +10,6 @@ import type EasySyncPlugin from '../main';
 import { BackupInfo, ConflictRecord, LastSyncSummary } from '../types';
 import { isConnectionConfigured } from '../storage/S3Config';
 import { restoreBackupWithConfirm } from '../backup/BackupRestore';
-import { formatConflictSideMeta } from './conflictPreview';
 
 export const EASY_SYNC_VIEW_TYPE = 'easy-sync-sidebar';
 
@@ -165,11 +164,6 @@ export class EasySyncSidebarView extends ItemView {
 			});
 			showDiff.addEventListener('click', () => {
 				void this.plugin.openConflictDiff(conflict.path);
-			});
-
-			item.createDiv({
-				cls: 'easy-sync-conflict-meta-line',
-				text: `Device ${formatConflictSideMeta(conflict, 'device')} · Cloud ${formatConflictSideMeta(conflict, 'cloud')}`,
 			});
 		}
 	}
