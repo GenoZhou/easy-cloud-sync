@@ -1,18 +1,22 @@
 # Questions — review-fixes-secrets
 
 ### Q1: SecretStorage scope
-Status: open
+Status: answered
 
 Which credentials move to Obsidian `SecretStorage` / `SecretComponent`?
 
 Recommended: Both Access key ID and Secret access key — two `SecretComponent`s; settings store `accessKeySecretId` and `secretAccessKeySecretId` (names only). Runtime resolves via `app.secretStorage.getSecret`. Bump `minAppVersion` to `1.11.4`. Remove plaintext key fields from persisted settings.
 
+Answer: Only **Secret access key** via `SecretComponent` / `SecretStorage`. Access key ID stays a normal settings text field (not in secret storage). Settings persist `secretAccessKeySecretId` (name only). Bump `minAppVersion` to `1.11.4`. Do not persist plaintext `secretAccessKey` in `data.json`.
+
 ### Q2: Migration from data.json plaintext
-Status: open
+Status: answered
 
 How to handle existing installs that already saved keys in `data.json`?
 
 Recommended: On load, if legacy plaintext `accessKeyId` / `secretAccessKey` are present, write them into `secretStorage` under stable ids (`easy-sync-access-key`, `easy-sync-secret-key`), point settings at those ids, clear plaintext from settings, `saveData`. One-time migration; document in README.
+
+Answer: **No migration** — plugin not published yet. Drop plaintext `secretAccessKey` from settings model cleanly; no legacy migrate path.
 
 ### Q3: Finding-fix approaches (bundle)
 Status: open

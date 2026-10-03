@@ -25,3 +25,10 @@ User ask: fix all findings; store credentials via Obsidian secret API.
 
 - `EasySyncSettings.accessKeyId` + `secretAccessKey` in `data.json` via `saveData`.
 - Password-type inputs in `settings.ts`; `S3Config` reads from settings object.
+
+## Round 1 partial answers (user)
+
+- Q1: SecretStorage only for Secret access key; Access key ID remains plain settings.
+- Q2: No migration (unpublished).
+- Q3–Q4 still open.
+
