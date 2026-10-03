@@ -38,6 +38,7 @@ export class SnapshotCreator {
 
 		const result: BackupResult = {
 			success: false,
+			snapshotCreated: false,
 			backupName,
 			startedAt,
 			completedAt: 0,
@@ -75,6 +76,7 @@ export class SnapshotCreator {
 			};
 
 			await this.uploadManifest(backupName, manifest);
+			result.snapshotCreated = true;
 			result.success = result.errors.length === 0;
 
 			if (this.settings.debugLogging) {

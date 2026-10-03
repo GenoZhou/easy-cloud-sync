@@ -5,6 +5,7 @@
  * Copyright (c) 2025 Sathindu
  */
 
+import { App } from 'obsidian';
 import { S3ClientConfig } from '@aws-sdk/client-s3';
 import { EasySyncSettings, S3ProviderType, S3_PROVIDER_NAMES } from '../types';
 import { ObsidianHttpHandler } from './ObsidianHttpHandler';
@@ -47,14 +48,26 @@ export function providerSupportsConditionalWrites(_provider: S3ProviderType): bo
 	return true;
 }
 
-export function buildS3ClientConfig(settings: EasySyncSettings): S3ClientConfig {
+/** Resolve the secret access key from Obsidian SecretStorage (never from data.json). */
+export function resolveSecretAccessKey(app: App, settings: EasySyncSettings): string | null {
+	const secretId = settings.secretAccessKeySecretId?.trim();
+	if (!secretId) {
+		return null;
+	}
+	return app.secretStorage.getSecret(secretId);
+}
+
+export function buildS3ClientConfig(
+	settings: EasySyncSettings,
+	secretAccessKey: string,
+): S3ClientConfig {
 	const endpoint = getEndpointForProvider(settings);
 
 	const config: S3ClientConfig = {
 		region: settings.region || 'auto',
 		credentials: {
 			accessKeyId: settings.accessKeyId,
-			secretAccessKey: settings.secretAccessKey,
+			secretAccessKey,
 		},
 		forcePathStyle: shouldForcePathStyle(settings),
 		requestChecksumCalculation: 'WHEN_REQUIRED',
@@ -71,7 +84,10 @@ export function buildS3ClientConfig(settings: EasySyncSettings): S3ClientConfig 
 	return config;
 }
 
-export function validateConnectionSettings(settings: EasySyncSettings): string[] {
+export function validateConnectionSettings(
+	settings: EasySyncSettings,
+	secretAccessKey: string | null,
+): string[] {
 	const errors: string[] = [];
 
 	if (!Object.prototype.hasOwnProperty.call(S3_PROVIDER_NAMES, settings.provider)) {
@@ -88,8 +104,10 @@ export function validateConnectionSettings(settings: EasySyncSettings): string[]
 		errors.push('Access Key ID is required');
 	}
 
-	if (!settings.secretAccessKey) {
+	if (!settings.secretAccessKeySecretId?.trim()) {
 		errors.push('Secret Access Key is required');
+	} else if (!secretAccessKey) {
+		errors.push('Secret Access Key is missing from secret storage');
 	}
 
 	if (settings.provider === 'r2' && !settings.endpoint) {
@@ -107,8 +125,8 @@ export function validateConnectionSettings(settings: EasySyncSettings): string[]
 	return errors;
 }
 
-export function isConnectionConfigured(settings: EasySyncSettings): boolean {
-	return validateConnectionSettings(settings).length === 0;
+export function isConnectionConfigured(app: App, settings: EasySyncSettings): boolean {
+	return validateConnectionSettings(settings, resolveSecretAccessKey(app, settings)).length === 0;
 }
 
 export function getProviderDisplayName(provider: S3ProviderType): string {

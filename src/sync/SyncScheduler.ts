@@ -96,7 +96,7 @@ export class SyncScheduler {
 		// Incomplete credentials: quiet skip for auto/startup (manual Notice is in main).
 		if (
 			(trigger === 'scheduled' || trigger === 'startup') &&
-			!isConnectionConfigured(this.settings)
+			!isConnectionConfigured(this.plugin.app, this.settings)
 		) {
 			return null;
 		}

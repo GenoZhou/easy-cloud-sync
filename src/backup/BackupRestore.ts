@@ -16,11 +16,11 @@ export class BackupRestore {
 	) {}
 
 	async restore(backupName: string): Promise<{ restored: number; errors: string[] }> {
-		const files = await this.downloader.downloadBackup(backupName);
+		const download = await this.downloader.downloadBackup(backupName);
 		let restored = 0;
-		const errors: string[] = [];
+		const errors = [...download.errors];
 
-		for (const [path, content] of files) {
+		for (const [path, content] of download.files) {
 			try {
 				await this.writeFile(path, content);
 				restored++;
@@ -70,7 +70,8 @@ export class BackupRestore {
 }
 
 class RestoreConfirmModal extends Modal {
-	private resolvePromise!: (value: boolean) => void;
+	private resolvePromise: ((value: boolean) => void) | null = null;
+	private settled = false;
 
 	constructor(
 		app: App,
@@ -86,6 +87,13 @@ class RestoreConfirmModal extends Modal {
 		});
 	}
 
+	private settle(value: boolean): void {
+		if (this.settled) return;
+		this.settled = true;
+		this.resolvePromise?.(value);
+		this.resolvePromise = null;
+	}
+
 	onOpen(): void {
 		const { contentEl } = this;
 		contentEl.empty();
@@ -98,21 +106,22 @@ class RestoreConfirmModal extends Modal {
 		const row = contentEl.createDiv({ cls: 'easy-sync-modal-actions' });
 		const cancel = row.createEl('button', { text: 'Cancel' });
 		cancel.addEventListener('click', () => {
+			this.settle(false);
 			this.close();
-			this.resolvePromise(false);
 		});
 		const confirmBtn = row.createEl('button', {
 			text: 'Restore',
 			cls: 'mod-cta',
 		});
 		confirmBtn.addEventListener('click', () => {
+			this.settle(true);
 			this.close();
-			this.resolvePromise(true);
 		});
 	}
 
 	onClose(): void {
 		this.contentEl.empty();
+		this.settle(false);
 	}
 }
 

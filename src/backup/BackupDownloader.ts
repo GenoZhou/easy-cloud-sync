@@ -12,6 +12,12 @@ import { EasySyncSettings, BackupManifest } from '../types';
 import { addPrefix, normalizePrefix, removePrefix } from '../utils/paths';
 import JSZip from 'jszip';
 
+export interface BackupDownloadResult {
+	files: Map<string, Uint8Array>;
+	errors: string[];
+	listedFileCount: number;
+}
+
 export class BackupDownloader {
 	private s3Provider: S3Provider;
 	private settings: EasySyncSettings;
@@ -34,11 +40,14 @@ export class BackupDownloader {
 		return JSON.parse(manifestJson) as BackupManifest;
 	}
 
-	async downloadBackup(backupName: string): Promise<Map<string, Uint8Array>> {
+	async downloadBackup(backupName: string): Promise<BackupDownloadResult> {
 		const files = new Map<string, Uint8Array>();
+		const errors: string[] = [];
 		const prefix = addPrefix(`${backupName}`, this.normalizedBackupPrefix);
 		const prefixWithSlash = `${prefix}/`;
 		const objects = await this.s3Provider.listObjects(prefix, true);
+
+		let listedFileCount = 0;
 
 		for (const obj of objects) {
 			if (obj.key.endsWith('.backup-manifest.json')) continue;
@@ -47,19 +56,30 @@ export class BackupDownloader {
 				removePrefix(obj.key, prefix) ?? removePrefix(obj.key, prefixWithSlash) ?? '';
 			if (!relativePath) continue;
 
+			listedFileCount++;
+
 			try {
 				const content = await this.s3Provider.downloadFile(obj.key);
 				files.set(relativePath, content);
 			} catch (error) {
+				const message = error instanceof Error ? error.message : 'Unknown error';
+				errors.push(`${relativePath}: ${message}`);
 				console.error(`Failed to download ${relativePath}:`, error);
 			}
 		}
 
-		return files;
+		return { files, errors, listedFileCount };
 	}
 
 	async createDownloadBlob(backupName: string): Promise<Blob> {
-		const files = await this.downloadBackup(backupName);
+		const { files, errors, listedFileCount } = await this.downloadBackup(backupName);
+		if (errors.length > 0) {
+			throw new Error(
+				`Download incomplete: ${errors.length} of ${listedFileCount} file(s) failed. ` +
+					`First error: ${errors[0]}`,
+			);
+		}
+
 		const zip = new JSZip();
 
 		for (const [path, content] of files) {

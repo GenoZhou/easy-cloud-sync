@@ -43,7 +43,7 @@ export class EasySyncSidebarView extends ItemView {
 	}
 
 	async refresh(): Promise<void> {
-		if (isConnectionConfigured(this.plugin.settings)) {
+		if (isConnectionConfigured(this.app, this.plugin.settings)) {
 			this.conflicts = (await this.plugin.getSyncJournal()?.getAllConflicts()) ?? [];
 			try {
 				this.backups = (await this.plugin.getRetentionManager()?.listBackups()) ?? [];
@@ -65,7 +65,7 @@ export class EasySyncSidebarView extends ItemView {
 
 		contentEl.createEl('h2', { text: 'Easy Sync' });
 
-		if (!isConnectionConfigured(this.plugin.settings)) {
+		if (!isConnectionConfigured(this.app, this.plugin.settings)) {
 			const cta = contentEl.createDiv({ cls: 'easy-sync-setup-cta' });
 			cta.createEl('p', {
 				text: 'Configure your S3 connection in settings to start syncing.',

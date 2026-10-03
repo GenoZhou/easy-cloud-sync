@@ -30,18 +30,7 @@ export class RetentionManager {
 	/** Keep newest {@link BACKUP_RETAIN_COPIES}; delete older snapshots. */
 	async applyRetentionPolicy(): Promise<number> {
 		const backups = await this.listBackups();
-		if (backups.length === 0) {
-			return 0;
-		}
-
-		backups.sort(
-			(a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
-		);
-
-		const toDelete =
-			backups.length > BACKUP_RETAIN_COPIES
-				? backups.slice(BACKUP_RETAIN_COPIES)
-				: [];
+		const toDelete = backupsExceedingRetention(backups, BACKUP_RETAIN_COPIES);
 
 		for (const backup of toDelete) {
 			await this.deleteBackup(backup.name);
@@ -122,4 +111,15 @@ export class RetentionManager {
 		}
 		return new Date().toISOString();
 	}
+}
+
+/** Newest-first prune list for unit tests and retention policy. */
+export function backupsExceedingRetention(
+	backups: BackupInfo[],
+	retainCopies: number = BACKUP_RETAIN_COPIES,
+): BackupInfo[] {
+	const sorted = [...backups].sort(
+		(a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+	);
+	return sorted.length > retainCopies ? sorted.slice(retainCopies) : [];
 }

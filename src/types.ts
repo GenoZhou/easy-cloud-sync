@@ -32,7 +32,8 @@ export interface EasySyncSettings {
 	region: string;
 	bucket: string;
 	accessKeyId: string;
-	secretAccessKey: string;
+	/** Obsidian SecretStorage id for the secret access key (value never persisted). */
+	secretAccessKeySecretId: string;
 	forcePathStyle: boolean;
 
 	syncPrefix: string;
@@ -48,7 +49,7 @@ export const DEFAULT_SETTINGS: EasySyncSettings = {
 	region: 'us-east-1',
 	bucket: '',
 	accessKeyId: '',
-	secretAccessKey: '',
+	secretAccessKeySecretId: '',
 	forcePathStyle: false,
 
 	syncPrefix: 'vault',
@@ -213,6 +214,8 @@ export interface BackupInfo {
 
 export interface BackupResult {
 	success: boolean;
+	/** True after the snapshot manifest was written to S3 (includes partial backups). */
+	snapshotCreated: boolean;
 	backupName: string;
 	startedAt: number;
 	completedAt: number;

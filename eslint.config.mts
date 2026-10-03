@@ -40,4 +40,19 @@ export default defineConfig(
 			'obsidianmd/settings-tab/prefer-setting-definitions': 'off',
 		},
 	},
+	{
+		files: ['tests/**/*.ts'],
+		languageOptions: {
+			globals: {
+				...globals.node,
+			},
+		},
+		rules: {
+			// Node test runner is Node-only and never bundled into the plugin.
+			'obsidianmd/no-nodejs-modules': 'off',
+			'obsidianmd/hardcoded-config-path': 'off',
+			// describe/it callbacks are registered, not awaited.
+			'@typescript-eslint/no-floating-promises': 'off',
+		},
+	},
 );

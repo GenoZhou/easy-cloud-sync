@@ -3,7 +3,7 @@
  * No sync/backup enable toggles; no retention knobs.
  */
 
-import { App, Notice, PluginSettingTab, Setting } from 'obsidian';
+import { App, Modal, Notice, PluginSettingTab, SecretComponent, Setting } from 'obsidian';
 import type EasySyncPlugin from './main';
 import {
 	EasySyncSettings,
@@ -54,9 +54,10 @@ export class EasySyncSettingTab extends PluginSettingTab {
 			text:
 				'Files are uploaded as-is (no client-side encryption). Anyone with your ' +
 				'bucket credentials can read vault contents. Network requests go only to ' +
-				'your configured S3-compatible endpoint. Syncing your config folder ' +
-				`(${configDir}/) can expose other plugins’ secrets — review exclude patterns ` +
-				'carefully. This plugin’s own data.json is never synced.',
+				'your configured S3-compatible endpoint. The secret access key is stored in ' +
+				'Obsidian secret storage (not in this plugin’s data.json). Syncing your config ' +
+				`folder (${configDir}/) can expose other plugins’ secrets — review exclude ` +
+				'patterns carefully. This plugin’s own data.json is never synced.',
 		});
 	}
 
@@ -139,15 +140,16 @@ export class EasySyncSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Secret access key')
-			.setDesc('Your S3 secret access key')
-			.addText((text) => {
-				text.setPlaceholder('Secret key');
-				text.setValue(this.plugin.settings.secretAccessKey);
-				text.inputEl.type = 'password';
-				text.onChange(async (value) => {
-					this.plugin.settings.secretAccessKey = value;
-					await this.plugin.saveSettings();
-				});
+			.setDesc(
+				'Stored in Obsidian secret storage. This plugin saves only the secret name, never the key value.',
+			)
+			.addComponent((container) => {
+				return new SecretComponent(this.app, container)
+					.setValue(this.plugin.settings.secretAccessKeySecretId)
+					.onChange(async (value) => {
+						this.plugin.settings.secretAccessKeySecretId = value;
+						await this.plugin.saveSettings();
+					});
 			});
 
 		if (this.plugin.settings.provider === 'custom') {
@@ -166,7 +168,7 @@ export class EasySyncSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName('Test connection')
 			.setDesc(
-				isConnectionConfigured(this.plugin.settings)
+				isConnectionConfigured(this.app, this.plugin.settings)
 					? 'Verify credentials and bucket access'
 					: 'Complete connection settings first',
 			)
@@ -174,7 +176,7 @@ export class EasySyncSettingTab extends PluginSettingTab {
 				btn.setButtonText('Test connection').onClick(async () => {
 					btn.setDisabled(true);
 					try {
-						const provider = new S3Provider(this.plugin.settings);
+						const provider = new S3Provider(this.plugin.settings, this.app);
 						const message = await provider.testConnection();
 						new Notice(message);
 					} catch (error) {
@@ -223,7 +225,6 @@ export class EasySyncSettingTab extends PluginSettingTab {
 				dropdown.onChange(async (value) => {
 					this.plugin.settings.syncIntervalMinutes = Number(value) as SyncIntervalMinutes;
 					await this.plugin.saveSettings();
-					this.plugin.onSettingsChanged();
 				});
 			});
 	}
@@ -244,8 +245,95 @@ export class EasySyncSettingTab extends PluginSettingTab {
 						.map((line) => line.trim())
 						.filter((line) => line.length > 0);
 					await this.plugin.saveSettings();
-					this.plugin.onSettingsChanged();
 				});
 			});
+
+		new Setting(containerEl)
+			.setName('Reset sync journal')
+			.setDesc(
+				'Clear local sync baselines and conflict records. Use when the destination ' +
+					'changed or a destructive sync plan was blocked and you intend a fresh re-upload.',
+			)
+			.addButton((btn) => {
+				btn.setButtonText('Reset sync journal')
+					.setWarning()
+					.onClick(() => {
+						void this.confirmResetJournal();
+					});
+			});
+	}
+
+	private async confirmResetJournal(): Promise<void> {
+		const confirmed = await new ConfirmModal(
+			this.app,
+			'Reset sync journal',
+			'Clear all local sync baselines and conflict records? The next sync will treat ' +
+				'the vault as not previously synced against this destination.',
+			'Reset sync journal',
+		).openAndWait();
+
+		if (!confirmed) return;
+
+		try {
+			await this.plugin.resetSyncJournal();
+			new Notice('Sync journal cleared');
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Failed to reset sync journal';
+			new Notice(message);
+		}
+	}
+}
+
+class ConfirmModal extends Modal {
+	private resolvePromise: ((value: boolean) => void) | null = null;
+	private settled = false;
+
+	constructor(
+		app: App,
+		private title: string,
+		private message: string,
+		private confirmLabel: string,
+	) {
+		super(app);
+	}
+
+	openAndWait(): Promise<boolean> {
+		return new Promise((resolve) => {
+			this.resolvePromise = resolve;
+			this.open();
+		});
+	}
+
+	private settle(value: boolean): void {
+		if (this.settled) return;
+		this.settled = true;
+		this.resolvePromise?.(value);
+		this.resolvePromise = null;
+	}
+
+	onOpen(): void {
+		const { contentEl } = this;
+		contentEl.empty();
+		contentEl.createEl('h2', { text: this.title });
+		contentEl.createEl('p', { text: this.message });
+		const row = contentEl.createDiv({ cls: 'easy-sync-modal-actions' });
+		const cancel = row.createEl('button', { text: 'Cancel' });
+		cancel.addEventListener('click', () => {
+			this.settle(false);
+			this.close();
+		});
+		const confirmBtn = row.createEl('button', {
+			text: this.confirmLabel,
+			cls: 'mod-warning',
+		});
+		confirmBtn.addEventListener('click', () => {
+			this.settle(true);
+			this.close();
+		});
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+		this.settle(false);
 	}
 }

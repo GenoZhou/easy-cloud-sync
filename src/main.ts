@@ -56,7 +56,7 @@ export default class EasySyncPlugin extends Plugin {
 		await this.loadSettings();
 		this.deviceId = getOrCreateDeviceId(this.app);
 
-		this.s3Provider = new S3Provider(this.settings);
+		this.s3Provider = new S3Provider(this.settings, this.app);
 
 		const vaultName = this.app.vault.getName();
 		this.syncJournal = new SyncJournal(vaultName);
@@ -131,7 +131,7 @@ export default class EasySyncPlugin extends Plugin {
 		this.startSyncServices();
 
 		this.app.workspace.onLayoutReady(() => {
-			if (isConnectionConfigured(this.settings)) {
+			if (isConnectionConfigured(this.app, this.settings)) {
 				void this.syncScheduler?.triggerSync('startup');
 			}
 		});
@@ -146,15 +146,20 @@ export default class EasySyncPlugin extends Plugin {
 	}
 
 	async loadSettings(): Promise<void> {
-		this.settings = Object.assign(
-			{},
-			DEFAULT_SETTINGS,
-			(await this.loadData()) as Partial<EasySyncSettings> | null,
-		);
+		const loaded = ((await this.loadData()) ?? {}) as Partial<EasySyncSettings> & {
+			secretAccessKey?: string;
+		};
+		// Unpublished: drop any legacy plaintext secret; no migration path.
+		delete loaded.secretAccessKey;
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded);
 	}
 
 	async saveSettings(): Promise<void> {
-		await this.saveData(this.settings);
+		const toPersist = { ...this.settings } as EasySyncSettings & {
+			secretAccessKey?: string;
+		};
+		delete toPersist.secretAccessKey;
+		await this.saveData(toPersist);
 
 		this.s3Provider?.updateSettings(this.settings);
 		this.syncEngine?.updateSettings(this.settings);
@@ -164,10 +169,23 @@ export default class EasySyncPlugin extends Plugin {
 		this.backupDownloader?.updateSettings(this.settings);
 		this.retentionManager?.updateSettings(this.settings);
 		this.changeTracker?.updateExcludePatterns(this.settings.excludePatterns);
+
+		// Restart scheduler / tracker when connection or sync settings change.
+		this.onSettingsChanged();
 	}
 
 	onSettingsChanged(): void {
 		this.restartSyncServices();
+		this.refreshSidebar();
+	}
+
+	/** Clear IndexedDB sync baselines/conflicts (Advanced → Reset sync journal). */
+	async resetSyncJournal(): Promise<void> {
+		if (!this.syncJournal) {
+			throw new Error('Sync journal is not available');
+		}
+		await this.syncJournal.clear();
+		this.lastSyncSummary = { ...EMPTY_SYNC_SUMMARY };
 		this.refreshSidebar();
 	}
 
@@ -199,7 +217,7 @@ export default class EasySyncPlugin extends Plugin {
 
 	private startSyncServices(): void {
 		this.changeTracker?.startTracking(this.settings.excludePatterns);
-		if (isConnectionConfigured(this.settings)) {
+		if (isConnectionConfigured(this.app, this.settings)) {
 			this.syncScheduler?.start();
 		}
 	}
@@ -215,7 +233,7 @@ export default class EasySyncPlugin extends Plugin {
 	}
 
 	async triggerManualSync(): Promise<void> {
-		if (!isConnectionConfigured(this.settings)) {
+		if (!isConnectionConfigured(this.app, this.settings)) {
 			new Notice('Configure S3 connection in settings before syncing.');
 			return;
 		}
@@ -250,7 +268,7 @@ export default class EasySyncPlugin extends Plugin {
 	}
 
 	async triggerManualBackup(): Promise<void> {
-		if (!isConnectionConfigured(this.settings)) {
+		if (!isConnectionConfigured(this.app, this.settings)) {
 			new Notice('Configure S3 connection in settings before backing up.');
 			return;
 		}
@@ -272,8 +290,12 @@ export default class EasySyncPlugin extends Plugin {
 			const vaultName = this.app.vault.getName();
 			const result = await this.snapshotCreator.createSnapshot(this.deviceId, vaultName);
 
-			if (result.success) {
+			// Retain-5 whenever a snapshot exists on S3, including partial success.
+			if (result.snapshotCreated) {
 				await this.retentionManager.applyRetentionPolicy();
+			}
+
+			if (result.success) {
 				new Notice(`Backup completed: ${result.filesBackedUp} files`);
 			} else {
 				const errorMsg = result.errors[0] ?? 'Unknown error';
