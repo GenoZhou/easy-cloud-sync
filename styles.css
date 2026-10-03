@@ -154,9 +154,7 @@
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
-	margin-top: 12px;
-	padding-top: 12px;
-	border-top: 1px solid var(--background-modifier-border);
+	margin-top: 14px;
 }
 
 /* Dedicated conflict-diff page */
@@ -175,7 +173,7 @@
 .easy-sync-diff-legend {
 	display: flex;
 	gap: 12px;
-	margin: 10px 0 6px;
+	margin: 10px 0 0;
 	font-size: 0.8em;
 }
 
@@ -190,6 +188,7 @@
 .easy-sync-diff-page-body {
 	max-height: none;
 	min-height: 200px;
+	margin-top: 14px;
 }
 
 .easy-sync-diff > .easy-sync-muted {

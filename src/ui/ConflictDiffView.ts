@@ -170,22 +170,39 @@ export class ConflictDiffView extends ItemView {
 			return;
 		}
 
-		// Tab title already shows "Conflict diff" — path + side meta, then actions.
-		contentEl.createEl('p', {
-			cls: 'easy-sync-conflict-path',
-			text: path,
-		});
-
+		// Tab title already shows "Conflict diff" — path + Open file share a row.
 		if (this.loading) {
+			contentEl.createEl('p', {
+				cls: 'easy-sync-conflict-path',
+				text: path,
+			});
 			contentEl.createEl('p', { cls: 'easy-sync-muted', text: 'Loading changes…' });
 			return;
 		}
 
 		const preview = this.preview;
 		if (!preview) {
+			contentEl.createEl('p', {
+				cls: 'easy-sync-conflict-path',
+				text: path,
+			});
 			contentEl.createEl('p', { cls: 'easy-sync-muted', text: 'No diff available.' });
 			return;
 		}
+
+		const header = contentEl.createDiv({ cls: 'easy-sync-conflict-row' });
+		header.createDiv({
+			cls: 'easy-sync-conflict-path',
+			text: path,
+		});
+		const openBtn = header.createEl('button', {
+			text: preview.deviceAvailable ? 'Open file' : 'Not on device',
+			cls: 'easy-sync-btn easy-sync-btn-ghost easy-sync-btn-inline',
+		});
+		openBtn.disabled = !preview.deviceAvailable || this.resolving;
+		openBtn.addEventListener('click', () => {
+			void this.openFile(path);
+		});
 
 		const meta = contentEl.createDiv({ cls: 'easy-sync-diff-meta' });
 		meta.createDiv({ text: `Device ${preview.deviceMeta}` });
@@ -194,15 +211,6 @@ export class ConflictDiffView extends ItemView {
 		const legend = contentEl.createDiv({ cls: 'easy-sync-diff-legend' });
 		legend.createSpan({ cls: 'easy-sync-diff-del', text: '− device' });
 		legend.createSpan({ cls: 'easy-sync-diff-add', text: '+ cloud' });
-
-		const openBtn = contentEl.createEl('button', {
-			text: preview.deviceAvailable ? 'Open file' : 'Not on device',
-			cls: 'easy-sync-btn easy-sync-btn-secondary',
-		});
-		openBtn.disabled = !preview.deviceAvailable || this.resolving;
-		openBtn.addEventListener('click', () => {
-			void this.openFile(path);
-		});
 
 		const diffHost = contentEl.createDiv({ cls: 'easy-sync-diff easy-sync-diff-page-body' });
 		this.renderDiff(diffHost, preview);
