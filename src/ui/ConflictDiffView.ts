@@ -1,6 +1,6 @@
 /**
- * Dedicated workspace page: inline unified diff for one conflicted file.
- * Opened from the Easy Sync sidebar via Show diff (not the primary decision surface).
+ * Dedicated workspace page: inline unified diff + resolve actions for one file.
+ * Opened from the Easy Sync sidebar via Show diff.
  */
 
 import { ItemView, Notice, TFile, ViewStateResult, WorkspaceLeaf } from 'obsidian';
@@ -11,6 +11,7 @@ import {
 	MAX_DIFF_PAGE_DISPLAY_LINES,
 	loadConflictPreview,
 } from './conflictPreview';
+import { ConflictResolution } from './ConflictResolver';
 
 export const EASY_SYNC_DIFF_VIEW_TYPE = 'easy-sync-conflict-diff';
 
@@ -19,6 +20,8 @@ export class ConflictDiffView extends ItemView {
 	private path: string | null = null;
 	private preview: ConflictPreview | null = null;
 	private loading = false;
+	private resolving = false;
+	private resolvedMessage: string | null = null;
 	private loadToken = 0;
 
 	constructor(leaf: WorkspaceLeaf, plugin: EasySyncPlugin) {
@@ -43,7 +46,11 @@ export class ConflictDiffView extends ItemView {
 	}
 
 	async setState(state: Record<string, unknown>, result: ViewStateResult): Promise<void> {
-		this.path = typeof state?.path === 'string' ? state.path : null;
+		const nextPath = typeof state?.path === 'string' ? state.path : null;
+		if (nextPath !== this.path) {
+			this.resolvedMessage = null;
+		}
+		this.path = nextPath;
 		await super.setState(state, result);
 		await this.reload();
 	}
@@ -60,6 +67,12 @@ export class ConflictDiffView extends ItemView {
 		const path = this.path;
 		if (!path) {
 			this.preview = null;
+			this.loading = false;
+			this.render();
+			return;
+		}
+
+		if (this.resolvedMessage) {
 			this.loading = false;
 			this.render();
 			return;
@@ -152,6 +165,21 @@ export class ConflictDiffView extends ItemView {
 			text: path,
 		});
 
+		if (this.resolvedMessage) {
+			contentEl.createEl('p', {
+				cls: 'easy-sync-muted',
+				text: this.resolvedMessage,
+			});
+			const back = contentEl.createEl('button', {
+				text: 'Back to sidebar list',
+				cls: 'easy-sync-btn easy-sync-btn-secondary',
+			});
+			back.addEventListener('click', () => {
+				void this.plugin.activateSidebar();
+			});
+			return;
+		}
+
 		if (this.loading) {
 			contentEl.createEl('p', { cls: 'easy-sync-muted', text: 'Loading changes…' });
 			return;
@@ -176,13 +204,78 @@ export class ConflictDiffView extends ItemView {
 			text: preview.deviceAvailable ? 'Open file' : 'Not on device',
 			cls: 'easy-sync-btn easy-sync-btn-secondary',
 		});
-		openBtn.disabled = !preview.deviceAvailable;
+		openBtn.disabled = !preview.deviceAvailable || this.resolving;
 		openBtn.addEventListener('click', () => {
 			void this.openFile(path);
 		});
 
 		const diffHost = contentEl.createDiv({ cls: 'easy-sync-diff easy-sync-diff-page-body' });
 		this.renderDiff(diffHost, preview);
+
+		const actions = contentEl.createDiv({ cls: 'easy-sync-conflict-actions' });
+		actions.createEl('p', {
+			cls: 'easy-sync-muted',
+			text: 'Resolve this file',
+		});
+		this.addResolveButton(actions, 'Keep on this device', 'keep-device', true);
+		this.addResolveButton(actions, 'Keep in the cloud', 'keep-cloud');
+		this.addResolveButton(actions, 'Keep both', 'keep-both');
+		this.addResolveButton(actions, 'Skip for now', 'skip');
+	}
+
+	private addResolveButton(
+		parent: HTMLElement,
+		label: string,
+		resolution: ConflictResolution,
+		primary = false,
+	): void {
+		const btn = parent.createEl('button', {
+			text: label,
+			cls: primary
+				? 'easy-sync-btn easy-sync-btn-primary'
+				: 'easy-sync-btn easy-sync-btn-secondary',
+		});
+		btn.disabled = this.resolving;
+		btn.addEventListener('click', () => {
+			void this.resolve(resolution);
+		});
+	}
+
+	private async resolve(resolution: ConflictResolution): Promise<void> {
+		const path = this.path;
+		if (!path) return;
+
+		if (resolution === 'skip') {
+			new Notice('Conflict kept for later. Resolve when ready.');
+			return;
+		}
+
+		const resolver = this.plugin.getConflictResolver();
+		if (!resolver) {
+			new Notice('Sync system not ready');
+			return;
+		}
+
+		this.resolving = true;
+		this.render();
+		try {
+			await resolver.resolve(path, resolution);
+			const label =
+				resolution === 'keep-device'
+					? 'Kept on this device'
+					: resolution === 'keep-cloud'
+						? 'Kept in the cloud'
+						: 'Kept both (cloud copy saved under the conflict folder)';
+			this.resolvedMessage = `${label}: ${path}`;
+			new Notice(`Conflict resolved: ${path}`);
+			this.plugin.refreshConflictUi();
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Resolve failed';
+			new Notice(message);
+		} finally {
+			this.resolving = false;
+			this.render();
+		}
 	}
 
 	private renderDiff(host: HTMLElement, preview: ConflictPreview): void {

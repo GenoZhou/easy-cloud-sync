@@ -1,7 +1,8 @@
 /**
  * Conflict resolution — Keep on this device / Keep in the cloud / Keep both / Skip.
  *
- * Keep both writes the non-primary copy as `name (conflict YYYY-MM-DD).ext`.
+ * Keep both writes the cloud copy under the configured conflict folder as
+ * `…/name (conflict YYYY-MM-DD).ext` (device content stays at the original path).
  * No LOCAL_/REMOTE_ prefixes.
  */
 
@@ -11,32 +12,15 @@ import { S3Provider } from '../storage/S3Provider';
 import { SyncJournal } from '../sync/SyncJournal';
 import { SyncPathCodec } from '../sync/SyncPathCodec';
 import { SyncPayloadCodec } from '../sync/SyncPayloadCodec';
-import { getDirectory, getExtension, getFilename } from '../utils/paths';
 import { getVaultFileKind, readVaultFile, toArrayBuffer } from '../utils/vaultFiles';
 import { encodeMetadata } from '../sync/SyncObjectMetadata';
+import { conflictCopyPath } from './conflictPaths';
 
 export type ConflictResolution =
 	| 'keep-device'
 	| 'keep-cloud'
 	| 'keep-both'
 	| 'skip';
-
-function filenameWithoutExtension(path: string): string {
-	const filename = getFilename(path);
-	const lastDot = filename.lastIndexOf('.');
-	return lastDot > 0 ? filename.substring(0, lastDot) : filename;
-}
-
-function conflictDatedPath(originalPath: string, date = new Date()): string {
-	const dir = getDirectory(originalPath);
-	const base = filenameWithoutExtension(originalPath);
-	const ext = getExtension(originalPath);
-	const yyyy = date.getFullYear();
-	const mm = String(date.getMonth() + 1).padStart(2, '0');
-	const dd = String(date.getDate()).padStart(2, '0');
-	const stamped = `${base} (conflict ${yyyy}-${mm}-${dd})${ext ? `.${ext}` : ''}`;
-	return dir ? `${dir}/${stamped}` : stamped;
-}
 
 export class ConflictResolver {
 	constructor(
@@ -46,6 +30,7 @@ export class ConflictResolver {
 		private pathCodec: SyncPathCodec,
 		private payloadCodec: SyncPayloadCodec,
 		private deviceId: string,
+		private getConflictFolder: () => string,
 	) {}
 
 	async resolve(path: string, resolution: ConflictResolution): Promise<void> {
@@ -143,8 +128,8 @@ export class ConflictResolver {
 	}
 
 	/**
-	 * Keep device content at the original path; write cloud content to a dated
-	 * conflict sibling; upload the device version.
+	 * Keep device content at the original path; write cloud content under the
+	 * conflict folder; upload the device version.
 	 */
 	private async keepBoth(path: string): Promise<void> {
 		const remoteKey = this.pathCodec.localToRemote(path);
@@ -152,7 +137,7 @@ export class ConflictResolver {
 		const file = this.app.vault.getAbstractFileByPath(path);
 
 		if (downloaded) {
-			const datedPath = conflictDatedPath(path);
+			const datedPath = conflictCopyPath(path, this.getConflictFolder());
 			const plaintext = this.payloadCodec.decodeAfterDownload(
 				downloaded.content,
 				downloaded.payloadFormat,

@@ -36,7 +36,7 @@ export class ConflictModal extends Modal {
 		});
 		contentEl.createEl('p', {
 			cls: 'easy-sync-muted',
-			text: 'Prefer the Easy Sync sidebar: Show diff per file, or Decide for all conflicts.',
+			text: 'Prefer Show diff in the Easy Sync sidebar — review the hunks, then resolve on that page.',
 		});
 
 		const actions = contentEl.createDiv({ cls: 'easy-sync-conflict-actions' });

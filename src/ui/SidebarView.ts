@@ -2,8 +2,8 @@
  * Easy Sync sidebar — last sync, Sync now, conflict list, backups.
  * This is the only status surface (no status bar).
  *
- * Conflicts: list unresolved paths; Show diff opens a dedicated page;
- * Decide opens an in-sidebar card that applies one choice to all conflicts.
+ * Conflicts: list unresolved paths; Show diff opens a dedicated page where
+ * the user reviews hunks and resolves that file.
  */
 
 import { ItemView, Notice, WorkspaceLeaf } from 'obsidian';
@@ -11,7 +11,6 @@ import type EasySyncPlugin from '../main';
 import { BackupInfo, ConflictRecord, LastSyncSummary } from '../types';
 import { isConnectionConfigured } from '../storage/S3Config';
 import { restoreBackupWithConfirm } from '../backup/BackupRestore';
-import { ConflictResolution } from './ConflictResolver';
 
 export const EASY_SYNC_VIEW_TYPE = 'easy-sync-sidebar';
 
@@ -19,9 +18,6 @@ export class EasySyncSidebarView extends ItemView {
 	plugin: EasySyncPlugin;
 	private conflicts: ConflictRecord[] = [];
 	private backups: BackupInfo[] = [];
-	private resolving = false;
-	/** When true, the decide-all card is expanded in the Conflicts section. */
-	private decideCardOpen = false;
 
 	constructor(leaf: WorkspaceLeaf, plugin: EasySyncPlugin) {
 		super(leaf);
@@ -51,9 +47,6 @@ export class EasySyncSidebarView extends ItemView {
 	async refresh(): Promise<void> {
 		if (isConnectionConfigured(this.app, this.plugin.settings)) {
 			this.conflicts = (await this.plugin.getSyncJournal()?.getAllConflicts()) ?? [];
-			if (this.conflicts.length === 0) {
-				this.decideCardOpen = false;
-			}
 			try {
 				this.backups = (await this.plugin.getRetentionManager()?.listBackups()) ?? [];
 				this.backups = this.backups.slice(0, 5);
@@ -63,7 +56,6 @@ export class EasySyncSidebarView extends ItemView {
 		} else {
 			this.conflicts = [];
 			this.backups = [];
-			this.decideCardOpen = false;
 		}
 		this.render();
 	}
@@ -162,22 +154,8 @@ export class EasySyncSidebarView extends ItemView {
 
 		section.createEl('p', {
 			cls: 'easy-sync-muted',
-			text: `${this.conflicts.length} unresolved · Show diff per file, or decide all at once.`,
+			text: `${this.conflicts.length} unresolved · Open Show diff to review and resolve each file.`,
 		});
-
-		const decideBtn = section.createEl('button', {
-			text: this.decideCardOpen ? 'Hide decide' : 'Decide',
-			cls: 'easy-sync-btn easy-sync-btn-primary',
-		});
-		decideBtn.disabled = this.resolving;
-		decideBtn.addEventListener('click', () => {
-			this.decideCardOpen = !this.decideCardOpen;
-			this.render();
-		});
-
-		if (this.decideCardOpen) {
-			this.renderDecideCard(section);
-		}
 
 		const list = section.createEl('ul', { cls: 'easy-sync-conflict-list' });
 		for (const conflict of this.conflicts) {
@@ -199,90 +177,9 @@ export class EasySyncSidebarView extends ItemView {
 				text: 'Show diff',
 				cls: 'easy-sync-btn easy-sync-btn-secondary',
 			});
-			showDiff.disabled = this.resolving;
 			showDiff.addEventListener('click', () => {
 				void this.plugin.openConflictDiff(conflict.path);
 			});
-		}
-	}
-
-	private renderDecideCard(parent: HTMLElement): void {
-		const card = parent.createDiv({ cls: 'easy-sync-decide-card' });
-		card.createEl('p', {
-			cls: 'easy-sync-decide-card-title',
-			text: `Apply to all ${this.conflicts.length} conflict(s)`,
-		});
-		card.createEl('p', {
-			cls: 'easy-sync-muted',
-			text: 'One choice clears every unresolved conflict listed below.',
-		});
-
-		const actions = card.createDiv({ cls: 'easy-sync-conflict-actions' });
-		this.addDecideButton(actions, 'Keep on this device', 'keep-device', true);
-		this.addDecideButton(actions, 'Keep in the cloud', 'keep-cloud');
-		this.addDecideButton(actions, 'Keep both', 'keep-both');
-		this.addDecideButton(actions, 'Skip for now', 'skip');
-	}
-
-	private addDecideButton(
-		parent: HTMLElement,
-		label: string,
-		resolution: ConflictResolution,
-		primary = false,
-	): void {
-		const btn = parent.createEl('button', {
-			text: label,
-			cls: primary
-				? 'easy-sync-btn easy-sync-btn-primary'
-				: 'easy-sync-btn easy-sync-btn-secondary',
-		});
-		btn.disabled = this.resolving;
-		btn.addEventListener('click', () => {
-			void this.resolveAll(resolution);
-		});
-	}
-
-	private async resolveAll(resolution: ConflictResolution): Promise<void> {
-		if (this.conflicts.length === 0) return;
-
-		if (resolution === 'skip') {
-			this.decideCardOpen = false;
-			new Notice('Conflicts kept for later. Resolve when ready.');
-			this.render();
-			return;
-		}
-
-		const resolver = this.plugin.getConflictResolver();
-		if (!resolver) {
-			new Notice('Sync system not ready');
-			return;
-		}
-
-		const paths = this.conflicts.map((c) => c.path);
-		this.resolving = true;
-		this.render();
-
-		let resolved = 0;
-		let failed = 0;
-		try {
-			for (const path of paths) {
-				try {
-					await resolver.resolve(path, resolution);
-					resolved++;
-				} catch {
-					failed++;
-				}
-			}
-			if (failed === 0) {
-				new Notice(`Resolved ${resolved} conflict(s)`);
-			} else {
-				new Notice(`Resolved ${resolved}; ${failed} failed`);
-			}
-			this.decideCardOpen = false;
-			await this.refresh();
-		} finally {
-			this.resolving = false;
-			this.render();
 		}
 	}
 

@@ -1,5 +1,5 @@
 /*
- * Easy Sync sidebar, conflict list, decide card, and dedicated diff page.
+ * Easy Sync sidebar, conflict list, and dedicated conflict-diff page.
  */
 
 .easy-sync-sidebar {
@@ -144,7 +144,7 @@
 	margin-bottom: 8px;
 }
 
-/* Conflict list + decide-all card */
+/* Conflict list */
 .easy-sync-conflict-path {
 	font-family: var(--font-monospace);
 	font-size: 0.9em;
@@ -159,25 +159,13 @@
 	color: var(--text-muted);
 }
 
-.easy-sync-decide-card {
-	margin: 10px 0 12px;
-	padding: 12px;
-	border: 1px solid var(--background-modifier-border);
-	border-radius: 10px;
-	background: var(--background-secondary);
-}
-
-.easy-sync-decide-card-title {
-	margin: 0 0 6px;
-	font-weight: 600;
-	font-size: 0.95em;
-}
-
 .easy-sync-conflict-actions {
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
-	margin-top: 8px;
+	margin-top: 12px;
+	padding-top: 12px;
+	border-top: 1px solid var(--background-modifier-border);
 }
 
 /* Dedicated conflict-diff page */
