@@ -1,14 +1,16 @@
 /**
- * Easy Sync sidebar — last sync, Sync now, conflict card, backups.
+ * Easy Sync sidebar — last sync, Sync now, conflict list, backups.
  * This is the only status surface (no status bar).
+ *
+ * Conflicts: list unresolved paths; Show diff opens a dedicated page;
+ * Decide opens an in-sidebar card that applies one choice to all conflicts.
  */
 
-import { ItemView, Notice, TFile, WorkspaceLeaf } from 'obsidian';
+import { ItemView, Notice, WorkspaceLeaf } from 'obsidian';
 import type EasySyncPlugin from '../main';
 import { BackupInfo, ConflictRecord, LastSyncSummary } from '../types';
 import { isConnectionConfigured } from '../storage/S3Config';
 import { restoreBackupWithConfirm } from '../backup/BackupRestore';
-import { ConflictPreview, loadConflictPreview } from './conflictPreview';
 import { ConflictResolution } from './ConflictResolver';
 
 export const EASY_SYNC_VIEW_TYPE = 'easy-sync-sidebar';
@@ -17,14 +19,9 @@ export class EasySyncSidebarView extends ItemView {
 	plugin: EasySyncPlugin;
 	private conflicts: ConflictRecord[] = [];
 	private backups: BackupInfo[] = [];
-	/** Index into {@link conflicts} for the one-at-a-time conflict card. */
-	private conflictIndex = 0;
-	private preview: ConflictPreview | null = null;
-	private previewLoading = false;
-	private previewPath: string | null = null;
 	private resolving = false;
-	/** Session cache so Prev/Next does not re-download cloud bodies. */
-	private previewCache = new Map<string, ConflictPreview>();
+	/** When true, the decide-all card is expanded in the Conflicts section. */
+	private decideCardOpen = false;
 
 	constructor(leaf: WorkspaceLeaf, plugin: EasySyncPlugin) {
 		super(leaf);
@@ -54,14 +51,8 @@ export class EasySyncSidebarView extends ItemView {
 	async refresh(): Promise<void> {
 		if (isConnectionConfigured(this.app, this.plugin.settings)) {
 			this.conflicts = (await this.plugin.getSyncJournal()?.getAllConflicts()) ?? [];
-			if (this.conflictIndex >= this.conflicts.length) {
-				this.conflictIndex = Math.max(0, this.conflicts.length - 1);
-			}
-			const livePaths = new Set(this.conflicts.map((c) => c.path));
-			for (const path of this.previewCache.keys()) {
-				if (!livePaths.has(path)) {
-					this.previewCache.delete(path);
-				}
+			if (this.conflicts.length === 0) {
+				this.decideCardOpen = false;
 			}
 			try {
 				this.backups = (await this.plugin.getRetentionManager()?.listBackups()) ?? [];
@@ -72,13 +63,9 @@ export class EasySyncSidebarView extends ItemView {
 		} else {
 			this.conflicts = [];
 			this.backups = [];
-			this.conflictIndex = 0;
-			this.preview = null;
-			this.previewPath = null;
-			this.previewCache.clear();
+			this.decideCardOpen = false;
 		}
 		this.render();
-		void this.ensureConflictPreview();
 	}
 
 	private render(): void {
@@ -111,7 +98,7 @@ export class EasySyncSidebarView extends ItemView {
 
 		this.renderLastSync(contentEl);
 		this.renderSyncActions(contentEl);
-		this.renderConflictCard(contentEl);
+		this.renderConflicts(contentEl);
 		this.renderBackups(contentEl);
 	}
 
@@ -161,7 +148,7 @@ export class EasySyncSidebarView extends ItemView {
 		});
 	}
 
-	private renderConflictCard(container: HTMLElement): void {
+	private renderConflicts(container: HTMLElement): void {
 		const section = container.createDiv({ cls: 'easy-sync-section' });
 		section.createEl('h3', { text: 'Conflicts' });
 
@@ -173,120 +160,71 @@ export class EasySyncSidebarView extends ItemView {
 			return;
 		}
 
-		const conflict = this.conflicts[this.conflictIndex]!;
-		const card = section.createDiv({ cls: 'easy-sync-conflict-card' });
-
-		const header = card.createDiv({ cls: 'easy-sync-conflict-card-header' });
-		header.createSpan({
-			cls: 'easy-sync-conflict-pager-label',
-			text: `${this.conflictIndex + 1} of ${this.conflicts.length}`,
-		});
-		const pager = header.createDiv({ cls: 'easy-sync-conflict-pager' });
-		const prev = pager.createEl('button', {
-			text: 'Prev',
-			cls: 'easy-sync-btn easy-sync-btn-ghost',
-		});
-		prev.disabled = this.conflictIndex <= 0;
-		prev.addEventListener('click', () => {
-			this.showConflictAt(this.conflictIndex - 1);
-		});
-		const next = pager.createEl('button', {
-			text: 'Next',
-			cls: 'easy-sync-btn easy-sync-btn-ghost',
-		});
-		next.disabled = this.conflictIndex >= this.conflicts.length - 1;
-		next.addEventListener('click', () => {
-			this.showConflictAt(this.conflictIndex + 1);
+		section.createEl('p', {
+			cls: 'easy-sync-muted',
+			text: `${this.conflicts.length} unresolved · Show diff per file, or decide all at once.`,
 		});
 
-		card.createEl('p', {
-			cls: 'easy-sync-conflict-path',
-			text: conflict.path,
+		const decideBtn = section.createEl('button', {
+			text: this.decideCardOpen ? 'Hide decide' : 'Decide',
+			cls: 'easy-sync-btn easy-sync-btn-primary',
+		});
+		decideBtn.disabled = this.resolving;
+		decideBtn.addEventListener('click', () => {
+			this.decideCardOpen = !this.decideCardOpen;
+			this.render();
 		});
 
-		const meta = card.createDiv({ cls: 'easy-sync-conflict-meta' });
-		meta.createEl('p', {
-			text: `On this device · ${this.preview?.deviceMeta ?? formatConflictMeta(conflict, 'device')}`,
-		});
-		meta.createEl('p', {
-			text: `In the cloud · ${this.preview?.cloudMeta ?? formatConflictMeta(conflict, 'cloud')}`,
-		});
-
-		const legend = card.createDiv({ cls: 'easy-sync-diff-legend' });
-		legend.createSpan({ cls: 'easy-sync-diff-del', text: '− device' });
-		legend.createSpan({ cls: 'easy-sync-diff-add', text: '+ cloud' });
-
-		const diffHost = card.createDiv({ cls: 'easy-sync-diff' });
-		if (this.previewLoading && this.previewPath === conflict.path) {
-			diffHost.createEl('p', { cls: 'easy-sync-muted', text: 'Loading changes…' });
-		} else if (this.preview && this.preview.path === conflict.path) {
-			this.renderDiff(diffHost, this.preview);
-		} else {
-			diffHost.createEl('p', { cls: 'easy-sync-muted', text: 'Loading changes…' });
+		if (this.decideCardOpen) {
+			this.renderDecideCard(section);
 		}
 
-		const nav = card.createDiv({ cls: 'easy-sync-btn-row' });
-		const deviceAvailable =
-			this.preview?.path === conflict.path
-				? this.preview.deviceAvailable
-				: this.app.vault.getAbstractFileByPath(conflict.path) instanceof TFile;
-		const openBtn = nav.createEl('button', {
-			text: deviceAvailable ? 'Open file' : 'Not on device',
-			cls: 'easy-sync-btn easy-sync-btn-secondary',
+		const list = section.createEl('ul', { cls: 'easy-sync-conflict-list' });
+		for (const conflict of this.conflicts) {
+			const item = list.createEl('li', { cls: 'easy-sync-conflict-item' });
+			item.createDiv({
+				cls: 'easy-sync-conflict-path',
+				text: conflict.path,
+			});
+
+			const meta = item.createDiv({ cls: 'easy-sync-conflict-meta' });
+			meta.createEl('p', {
+				text: `On this device · ${formatConflictMeta(conflict, 'device')}`,
+			});
+			meta.createEl('p', {
+				text: `In the cloud · ${formatConflictMeta(conflict, 'cloud')}`,
+			});
+
+			const showDiff = item.createEl('button', {
+				text: 'Show diff',
+				cls: 'easy-sync-btn easy-sync-btn-secondary',
+			});
+			showDiff.disabled = this.resolving;
+			showDiff.addEventListener('click', () => {
+				void this.plugin.openConflictDiff(conflict.path);
+			});
+		}
+	}
+
+	private renderDecideCard(parent: HTMLElement): void {
+		const card = parent.createDiv({ cls: 'easy-sync-decide-card' });
+		card.createEl('p', {
+			cls: 'easy-sync-decide-card-title',
+			text: `Apply to all ${this.conflicts.length} conflict(s)`,
 		});
-		openBtn.disabled = !deviceAvailable;
-		openBtn.addEventListener('click', () => {
-			void this.openConflictFile(conflict.path);
+		card.createEl('p', {
+			cls: 'easy-sync-muted',
+			text: 'One choice clears every unresolved conflict listed below.',
 		});
 
 		const actions = card.createDiv({ cls: 'easy-sync-conflict-actions' });
-		this.addResolveButton(actions, 'Keep on this device', 'keep-device', true);
-		this.addResolveButton(actions, 'Keep in the cloud', 'keep-cloud');
-		this.addResolveButton(actions, 'Keep both', 'keep-both');
-		this.addResolveButton(actions, 'Skip', 'skip');
+		this.addDecideButton(actions, 'Keep on this device', 'keep-device', true);
+		this.addDecideButton(actions, 'Keep in the cloud', 'keep-cloud');
+		this.addDecideButton(actions, 'Keep both', 'keep-both');
+		this.addDecideButton(actions, 'Skip for now', 'skip');
 	}
 
-	private renderDiff(host: HTMLElement, preview: ConflictPreview): void {
-		if (preview.message && preview.diffLines.length === 0) {
-			host.createEl('p', { cls: 'easy-sync-muted', text: preview.message });
-			return;
-		}
-
-		if (preview.identical) {
-			host.createEl('p', {
-				cls: 'easy-sync-muted',
-				text: preview.message ?? 'No text changes.',
-			});
-			return;
-		}
-
-		const list = host.createDiv({ cls: 'easy-sync-diff-lines' });
-		for (const line of preview.diffLines) {
-			const row = list.createDiv({
-				cls: `easy-sync-diff-line easy-sync-diff-${line.kind}`,
-			});
-			const prefix =
-				line.kind === 'add' ? '+' : line.kind === 'del' ? '−' : ' ';
-			row.createSpan({ cls: 'easy-sync-diff-prefix', text: prefix });
-			row.createSpan({
-				cls: 'easy-sync-diff-text',
-				text: line.text.length > 0 ? line.text : ' ',
-			});
-		}
-
-		if (preview.omittedDiffLines > 0) {
-			host.createEl('p', {
-				cls: 'easy-sync-muted',
-				text: `${preview.omittedDiffLines} more changed lines not shown. Open the file to review the rest.`,
-			});
-		}
-
-		if (preview.message) {
-			host.createEl('p', { cls: 'easy-sync-muted', text: preview.message });
-		}
-	}
-
-	private addResolveButton(
+	private addDecideButton(
 		parent: HTMLElement,
 		label: string,
 		resolution: ConflictResolution,
@@ -300,36 +238,17 @@ export class EasySyncSidebarView extends ItemView {
 		});
 		btn.disabled = this.resolving;
 		btn.addEventListener('click', () => {
-			void this.resolveCurrent(resolution);
+			void this.resolveAll(resolution);
 		});
 	}
 
-	private showConflictAt(index: number): void {
-		if (index < 0 || index >= this.conflicts.length) return;
-		this.conflictIndex = index;
-		const path = this.conflicts[index]!.path;
-		const cached = this.previewCache.get(path);
-		this.preview = cached ?? null;
-		this.previewPath = cached ? path : null;
-		this.previewLoading = !cached;
-		this.render();
-		if (!cached) {
-			void this.ensureConflictPreview();
-		}
-	}
-
-	private async resolveCurrent(resolution: ConflictResolution): Promise<void> {
-		const conflict = this.conflicts[this.conflictIndex];
-		if (!conflict) return;
+	private async resolveAll(resolution: ConflictResolution): Promise<void> {
+		if (this.conflicts.length === 0) return;
 
 		if (resolution === 'skip') {
-			if (this.conflicts.length <= 1) {
-				new Notice('Conflict kept for later. Resolve when ready.');
-				return;
-			}
-			const nextIndex = (this.conflictIndex + 1) % this.conflicts.length;
-			new Notice('Skipped — still unresolved. Showing next conflict.');
-			this.showConflictAt(nextIndex);
+			this.decideCardOpen = false;
+			new Notice('Conflicts kept for later. Resolve when ready.');
+			this.render();
 			return;
 		}
 
@@ -339,103 +258,31 @@ export class EasySyncSidebarView extends ItemView {
 			return;
 		}
 
+		const paths = this.conflicts.map((c) => c.path);
 		this.resolving = true;
 		this.render();
+
+		let resolved = 0;
+		let failed = 0;
 		try {
-			await resolver.resolve(conflict.path, resolution);
-			this.previewCache.delete(conflict.path);
-			new Notice(`Conflict resolved: ${conflict.path}`);
+			for (const path of paths) {
+				try {
+					await resolver.resolve(path, resolution);
+					resolved++;
+				} catch {
+					failed++;
+				}
+			}
+			if (failed === 0) {
+				new Notice(`Resolved ${resolved} conflict(s)`);
+			} else {
+				new Notice(`Resolved ${resolved}; ${failed} failed`);
+			}
+			this.decideCardOpen = false;
 			await this.refresh();
-		} catch (error) {
-			const message = error instanceof Error ? error.message : 'Resolve failed';
-			new Notice(message);
-			this.resolving = false;
-			this.render();
 		} finally {
 			this.resolving = false;
-		}
-	}
-
-	private async openConflictFile(path: string): Promise<void> {
-		const file = this.app.vault.getAbstractFileByPath(path);
-		if (!(file instanceof TFile)) {
-			new Notice('This file is not on this device');
-			return;
-		}
-		await this.app.workspace.getLeaf(false).openFile(file);
-	}
-
-	private async ensureConflictPreview(): Promise<void> {
-		const conflict = this.conflicts[this.conflictIndex];
-		if (!conflict) {
-			this.preview = null;
-			this.previewPath = null;
-			this.previewLoading = false;
-			return;
-		}
-
-		const path = conflict.path;
-		const cached = this.previewCache.get(path);
-		if (cached) {
-			if (this.preview === cached && this.previewPath === path && !this.previewLoading) {
-				return;
-			}
-			this.preview = cached;
-			this.previewPath = path;
-			this.previewLoading = false;
 			this.render();
-			return;
-		}
-
-		// Already loading this path — avoid a second render flash.
-		if (this.previewLoading && this.previewPath === path && !this.preview) {
-			return;
-		}
-
-		const s3 = this.plugin.getS3Provider();
-		const pathCodec = this.plugin.getPathCodec();
-		const payloadCodec = this.plugin.getPayloadCodec();
-		if (!s3 || !pathCodec || !payloadCodec) {
-			return;
-		}
-
-		this.previewLoading = true;
-		this.previewPath = path;
-		this.preview = null;
-		this.render();
-
-		try {
-			const preview = await loadConflictPreview(
-				this.app,
-				s3,
-				pathCodec,
-				payloadCodec,
-				conflict,
-			);
-			if (this.previewPath !== path) return;
-			this.previewCache.set(path, preview);
-			this.preview = preview;
-		} catch (error) {
-			if (this.previewPath !== path) return;
-			const message = error instanceof Error ? error.message : 'Failed to load diff';
-			const failed: ConflictPreview = {
-				kind: 'unavailable',
-				path,
-				deviceMeta: formatConflictMeta(conflict, 'device'),
-				cloudMeta: formatConflictMeta(conflict, 'cloud'),
-				deviceAvailable: this.app.vault.getAbstractFileByPath(path) instanceof TFile,
-				diffLines: [],
-				omittedDiffLines: 0,
-				identical: false,
-				message,
-			};
-			this.previewCache.set(path, failed);
-			this.preview = failed;
-		} finally {
-			this.previewLoading = false;
-			if (this.previewPath === path) {
-				this.render();
-			}
 		}
 	}
 

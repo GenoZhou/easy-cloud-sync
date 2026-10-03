@@ -29,6 +29,7 @@ import { BackupDownloader } from './backup/BackupDownloader';
 import { RetentionManager } from './backup/RetentionManager';
 import { getOrCreateDeviceId } from './utils/deviceId';
 import { ConflictResolver } from './ui/ConflictResolver';
+import { ConflictDiffView, EASY_SYNC_DIFF_VIEW_TYPE } from './ui/ConflictDiffView';
 import { EasySyncSidebarView, EASY_SYNC_VIEW_TYPE } from './ui/SidebarView';
 
 /** Journal metadata key for durable last-sync sidebar summary (JSON string). */
@@ -121,6 +122,7 @@ export default class EasySyncPlugin extends Plugin {
 		);
 
 		this.registerView(EASY_SYNC_VIEW_TYPE, (leaf) => new EasySyncSidebarView(leaf, this));
+		this.registerView(EASY_SYNC_DIFF_VIEW_TYPE, (leaf) => new ConflictDiffView(leaf, this));
 
 		this.addRibbonIcon('refresh-cw', 'Open Easy Sync', () => {
 			void this.activateSidebar();
@@ -314,6 +316,21 @@ export default class EasySyncPlugin extends Plugin {
 		if (view instanceof EasySyncSidebarView) {
 			await view.refresh();
 		}
+	}
+
+	/** Open the dedicated conflict-diff page for one vault path. */
+	async openConflictDiff(path: string): Promise<void> {
+		const { workspace } = this.app;
+		let leaf = workspace.getLeavesOfType(EASY_SYNC_DIFF_VIEW_TYPE)[0];
+		if (!leaf) {
+			leaf = workspace.getLeaf('tab');
+		}
+		await leaf.setViewState({
+			type: EASY_SYNC_DIFF_VIEW_TYPE,
+			active: true,
+			state: { path },
+		});
+		await workspace.revealLeaf(leaf);
 	}
 
 	private refreshSidebar(): void {

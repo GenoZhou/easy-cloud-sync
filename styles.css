@@ -1,5 +1,5 @@
 /*
- * Easy Sync sidebar and conflict card styles.
+ * Easy Sync sidebar, conflict list, decide card, and dedicated diff page.
  */
 
 .easy-sync-sidebar {
@@ -121,16 +121,22 @@
 	margin: 8px 0;
 }
 
-.easy-sync-backup-list {
+.easy-sync-backup-list,
+.easy-sync-conflict-list {
 	list-style: none;
 	margin: 10px 0 0;
 	padding: 0;
 }
 
-.easy-sync-backup-item {
+.easy-sync-backup-item,
+.easy-sync-conflict-item {
 	margin: 0;
 	padding: 10px 0;
 	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.easy-sync-conflict-item .easy-sync-btn {
+	margin-top: 8px;
 }
 
 .easy-sync-backup-meta {
@@ -138,32 +144,7 @@
 	margin-bottom: 8px;
 }
 
-/* Conflict card (one file at a time) */
-.easy-sync-conflict-card {
-	padding: 12px;
-	border: 1px solid var(--background-modifier-border);
-	border-radius: 10px;
-	background: var(--background-secondary);
-}
-
-.easy-sync-conflict-card-header {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 8px;
-	margin-bottom: 8px;
-}
-
-.easy-sync-conflict-pager-label {
-	font-size: 0.85em;
-	color: var(--text-muted);
-}
-
-.easy-sync-conflict-pager {
-	display: flex;
-	gap: 6px;
-}
-
+/* Conflict list + decide-all card */
 .easy-sync-conflict-path {
 	font-family: var(--font-monospace);
 	font-size: 0.9em;
@@ -178,6 +159,40 @@
 	color: var(--text-muted);
 }
 
+.easy-sync-decide-card {
+	margin: 10px 0 12px;
+	padding: 12px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 10px;
+	background: var(--background-secondary);
+}
+
+.easy-sync-decide-card-title {
+	margin: 0 0 6px;
+	font-weight: 600;
+	font-size: 0.95em;
+}
+
+.easy-sync-conflict-actions {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin-top: 8px;
+}
+
+/* Dedicated conflict-diff page */
+.easy-sync-diff-page {
+	padding: 16px 20px 32px;
+	overflow-y: auto;
+	height: 100%;
+	box-sizing: border-box;
+}
+
+.easy-sync-diff-page h2 {
+	margin-top: 0;
+	margin-bottom: 8px;
+}
+
 .easy-sync-diff-legend {
 	display: flex;
 	gap: 12px;
@@ -187,11 +202,15 @@
 
 .easy-sync-diff {
 	margin: 0 0 10px;
-	max-height: 220px;
 	overflow: auto;
 	border: 1px solid var(--background-modifier-border);
 	border-radius: 8px;
 	background: var(--background-primary);
+}
+
+.easy-sync-diff-page-body {
+	max-height: none;
+	min-height: 200px;
 }
 
 .easy-sync-diff > .easy-sync-muted {
@@ -239,13 +258,6 @@
 	color: var(--text-muted);
 }
 
-.easy-sync-conflict-actions {
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-	margin-top: 4px;
-}
-
 .easy-sync-modal-actions {
 	display: flex;
 	flex-direction: column;
@@ -261,5 +273,9 @@
 @media (max-width: 360px) {
 	.easy-sync-stat-grid {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.easy-sync-btn-row {
+		grid-template-columns: 1fr;
 	}
 }

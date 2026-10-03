@@ -1,6 +1,6 @@
 /**
- * Conflict resolution modal — kept as a thin fallback.
- * Primary UX is the sidebar conflict card (one file at a time + hunk diff).
+ * Thin fallback modal for conflict resolution.
+ * Primary UX: sidebar Decide card (all conflicts) + per-file Show diff page.
  */
 
 import { App, Modal } from 'obsidian';
@@ -36,7 +36,7 @@ export class ConflictModal extends Modal {
 		});
 		contentEl.createEl('p', {
 			cls: 'easy-sync-muted',
-			text: 'Use the Easy Sync sidebar conflict card to review changes and resolve.',
+			text: 'Prefer the Easy Sync sidebar: Show diff per file, or Decide for all conflicts.',
 		});
 
 		const actions = contentEl.createDiv({ cls: 'easy-sync-conflict-actions' });

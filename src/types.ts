@@ -94,7 +94,7 @@ export interface SyncStateRecord {
 /**
  * Unresolved conflict tracked in IndexedDB.
  * Versions stay in place (device file + cloud object) until the user resolves
- * via the conflict modal — no LOCAL_/REMOTE_ artifact files.
+ * via the sidebar Decide card — no LOCAL_/REMOTE_ artifact files.
  */
 export interface ConflictRecord {
 	path: string;

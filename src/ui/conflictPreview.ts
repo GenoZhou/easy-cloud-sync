@@ -1,7 +1,7 @@
 /**
- * Load device + cloud sides of a conflict for a mobile-friendly hunk preview.
+ * Load device + cloud sides of a conflict for the dedicated diff page.
  *
- * Full texts are diffed; only the first changed lines are shown in the card.
+ * Full texts are diffed; callers choose how many changed lines to show.
  */
 
 import { App, TFile } from 'obsidian';
@@ -19,8 +19,16 @@ import {
 /** Skip full-body download/diff when either side exceeds this (bytes). */
 export const MAX_INLINE_PREVIEW_BYTES = 512 * 1024;
 
-/** How many unified diff output lines to show in the card. */
+/** Default display cap (legacy / compact surfaces). */
 export const MAX_DIFF_DISPLAY_LINES = 48;
+
+/** Dedicated conflict-diff page can show more hunk lines. */
+export const MAX_DIFF_PAGE_DISPLAY_LINES = 2000;
+
+export interface LoadConflictPreviewOptions {
+	/** Max unified-diff output lines to keep after a full-file compare. */
+	maxDisplayLines?: number;
+}
 
 export type ConflictPreviewKind = 'text' | 'binary' | 'unavailable';
 
@@ -55,7 +63,9 @@ export async function loadConflictPreview(
 	pathCodec: SyncPathCodec,
 	payloadCodec: SyncPayloadCodec,
 	conflict: ConflictRecord,
+	options: LoadConflictPreviewOptions = {},
 ): Promise<ConflictPreview> {
+	const maxDisplayLines = options.maxDisplayLines ?? MAX_DIFF_DISPLAY_LINES;
 	const path = conflict.path;
 	const deviceMeta = formatMeta(conflict.deviceMtime, conflict.deviceSize);
 	const cloudMeta = formatMeta(conflict.cloudMtime, conflict.cloudSize);
@@ -155,9 +165,9 @@ export async function loadConflictPreview(
 		};
 	}
 
-	// Full-file diff; only the first changed hunk lines are shown in the card.
+	// Full-file diff; only the first changed hunk lines are kept for display.
 	const diff = buildUnifiedHunks(deviceText ?? '', cloudText ?? '');
-	const flat = flattenHunksForDisplay(diff.hunks, MAX_DIFF_DISPLAY_LINES);
+	const flat = flattenHunksForDisplay(diff.hunks, maxDisplayLines);
 
 	let message: string | undefined;
 	if (diff.identical) {
