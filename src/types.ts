@@ -38,18 +38,10 @@ export interface EasySyncSettings {
 
 	syncPrefix: string;
 	backupPrefix: string;
-	/**
-	 * Vault folder for Keep-both copies (relative path). Cloud content is written
-	 * under this root, preserving the original relative directory.
-	 */
-	conflictFolder: string;
 	excludePatterns: string[];
 	syncIntervalMinutes: SyncIntervalMinutes;
 	debugLogging: boolean;
 }
-
-/** Default vault folder for Keep-both conflict copies. */
-export const DEFAULT_CONFLICT_FOLDER = 'Easy Sync Conflicts';
 
 export const DEFAULT_SETTINGS: EasySyncSettings = {
 	provider: 'aws',
@@ -62,7 +54,6 @@ export const DEFAULT_SETTINGS: EasySyncSettings = {
 
 	syncPrefix: 'vault',
 	backupPrefix: 'backups',
-	conflictFolder: DEFAULT_CONFLICT_FOLDER,
 	excludePatterns: ['**/workspace*', '.trash/**'],
 	syncIntervalMinutes: 5,
 	debugLogging: false,

@@ -16,7 +16,6 @@ import {
 	LastSyncSummary,
 	SyncResult,
 } from './types';
-import { normalizeConflictFolder } from './ui/conflictPaths';
 import { S3Provider } from './storage/S3Provider';
 import { isConnectionConfigured } from './storage/S3Config';
 import { SyncJournal } from './sync/SyncJournal';
@@ -120,7 +119,6 @@ export default class EasySyncPlugin extends Plugin {
 			this.pathCodec,
 			this.payloadCodec,
 			this.deviceId,
-			() => this.settings.conflictFolder,
 		);
 
 		this.registerView(EASY_SYNC_VIEW_TYPE, (leaf) => new EasySyncSidebarView(leaf, this));
@@ -156,7 +154,8 @@ export default class EasySyncPlugin extends Plugin {
 		// Unpublished: drop any legacy plaintext secret; no migration path.
 		delete loaded.secretAccessKey;
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded);
-		this.settings.conflictFolder = normalizeConflictFolder(this.settings.conflictFolder);
+		// Unpublished: drop unused Keep-both folder setting if present in old data.
+		delete (this.settings as EasySyncSettings & { conflictFolder?: string }).conflictFolder;
 	}
 
 	async saveSettings(): Promise<void> {

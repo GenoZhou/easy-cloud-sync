@@ -1,9 +1,8 @@
 /**
- * Conflict resolution — Keep on this device / Keep in the cloud / Keep both / Skip.
+ * Conflict resolution — Keep on this device / Keep in the cloud / Skip.
  *
- * Keep both writes the cloud copy under the configured conflict folder as
- * `…/name (conflict YYYY-MM-DD).ext` (device content stays at the original path).
- * No LOCAL_/REMOTE_ prefixes.
+ * Versions stay in place (device file + cloud object) until the user picks a side.
+ * No LOCAL_/REMOTE_ prefixes; no Keep-both sibling copies.
  */
 
 import { App, TFile } from 'obsidian';
@@ -14,13 +13,8 @@ import { SyncPathCodec } from '../sync/SyncPathCodec';
 import { SyncPayloadCodec } from '../sync/SyncPayloadCodec';
 import { getVaultFileKind, readVaultFile, toArrayBuffer } from '../utils/vaultFiles';
 import { encodeMetadata } from '../sync/SyncObjectMetadata';
-import { conflictCopyPath } from './conflictPaths';
 
-export type ConflictResolution =
-	| 'keep-device'
-	| 'keep-cloud'
-	| 'keep-both'
-	| 'skip';
+export type ConflictResolution = 'keep-device' | 'keep-cloud' | 'skip';
 
 export class ConflictResolver {
 	constructor(
@@ -30,7 +24,6 @@ export class ConflictResolver {
 		private pathCodec: SyncPathCodec,
 		private payloadCodec: SyncPayloadCodec,
 		private deviceId: string,
-		private getConflictFolder: () => string,
 	) {}
 
 	async resolve(path: string, resolution: ConflictResolution): Promise<void> {
@@ -49,9 +42,6 @@ export class ConflictResolver {
 				break;
 			case 'keep-cloud':
 				await this.keepCloud(path);
-				break;
-			case 'keep-both':
-				await this.keepBoth(path);
 				break;
 		}
 	}
@@ -124,39 +114,6 @@ export class ConflictResolver {
 			lastSyncedAt: Date.now(),
 		};
 		await this.journal.setStateRecord(record);
-		await this.journal.deleteConflict(path);
-	}
-
-	/**
-	 * Keep device content at the original path; write cloud content under the
-	 * conflict folder; upload the device version.
-	 */
-	private async keepBoth(path: string): Promise<void> {
-		const remoteKey = this.pathCodec.localToRemote(path);
-		const downloaded = await this.s3Provider.downloadFileWithMetadata(remoteKey);
-		const file = this.app.vault.getAbstractFileByPath(path);
-
-		if (downloaded) {
-			const datedPath = conflictCopyPath(path, this.getConflictFolder());
-			const plaintext = this.payloadCodec.decodeAfterDownload(
-				downloaded.content,
-				downloaded.payloadFormat,
-			);
-			const kind = getVaultFileKind(path);
-			await this.writeLocalFile(
-				datedPath,
-				kind === 'text' ? new TextDecoder().decode(plaintext) : plaintext,
-			);
-		}
-
-		if (file instanceof TFile) {
-			await this.uploadLocal(file);
-		} else if (downloaded) {
-			// No device file — adopt cloud at original path instead
-			await this.keepCloud(path);
-			return;
-		}
-
 		await this.journal.deleteConflict(path);
 	}
 

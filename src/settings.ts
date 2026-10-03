@@ -6,14 +6,12 @@
 import { App, Notice, PluginSettingTab, SecretComponent, Setting } from 'obsidian';
 import type EasySyncPlugin from './main';
 import {
-	DEFAULT_CONFLICT_FOLDER,
 	EasySyncSettings,
 	S3ProviderType,
 	S3_PROVIDER_NAMES,
 	SyncIntervalMinutes,
 } from './types';
 import { normalizePrefix } from './utils/paths';
-import { normalizeConflictFolder } from './ui/conflictPaths';
 import { S3Provider } from './storage/S3Provider';
 import { isConnectionConfigured } from './storage/S3Config';
 import { ConfirmModal } from './ui/ConfirmModal';
@@ -213,21 +211,6 @@ export class EasySyncSettingTab extends PluginSettingTab {
 				text.setValue(this.plugin.settings.backupPrefix);
 				text.onChange(async (value) => {
 					this.plugin.settings.backupPrefix = normalizePrefix(value);
-					await this.plugin.saveSettings();
-				});
-			});
-
-		new Setting(containerEl)
-			.setName('Conflict folder')
-			.setDesc(
-				`Vault folder for Keep both copies (cloud version saved here; ` +
-					`device version stays at the original path). Default: ${DEFAULT_CONFLICT_FOLDER}`,
-			)
-			.addText((text) => {
-				text.setPlaceholder(DEFAULT_CONFLICT_FOLDER);
-				text.setValue(this.plugin.settings.conflictFolder);
-				text.onChange(async (value) => {
-					this.plugin.settings.conflictFolder = normalizeConflictFolder(value);
 					await this.plugin.saveSettings();
 				});
 			});

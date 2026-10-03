@@ -219,7 +219,6 @@ export class ConflictDiffView extends ItemView {
 		});
 		this.addResolveButton(actions, 'Keep on this device', 'keep-device', true);
 		this.addResolveButton(actions, 'Keep in the cloud', 'keep-cloud');
-		this.addResolveButton(actions, 'Keep both', 'keep-both');
 		this.addResolveButton(actions, 'Skip for now', 'skip');
 	}
 
@@ -261,11 +260,7 @@ export class ConflictDiffView extends ItemView {
 		try {
 			await resolver.resolve(path, resolution);
 			const label =
-				resolution === 'keep-device'
-					? 'Kept on this device'
-					: resolution === 'keep-cloud'
-						? 'Kept in the cloud'
-						: 'Kept both (cloud copy saved under the conflict folder)';
+				resolution === 'keep-device' ? 'Kept on this device' : 'Kept in the cloud';
 			this.resolvedMessage = `${label}: ${path}`;
 			new Notice(`Conflict resolved: ${path}`);
 			this.plugin.refreshConflictUi();

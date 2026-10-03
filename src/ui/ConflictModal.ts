@@ -58,7 +58,6 @@ export class ConflictModal extends Modal {
 
 		add('Keep on this device', 'keep-device', true);
 		add('Keep in the cloud', 'keep-cloud');
-		add('Keep both', 'keep-both');
 		add('Skip', 'skip');
 	}
 
