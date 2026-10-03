@@ -33,3 +33,8 @@
 
 - Accept all recommendations Q7–Q10 (sidebar ops surface; conflict entry points; sync scope; backup actions).
 
+## Round 3 decisions (user)
+
+- Accept all recommendations Q11–Q13 (conflict labels, restore semantics, first-run CTA).
+- Frontier empty — draft plan for confirmation.
+
