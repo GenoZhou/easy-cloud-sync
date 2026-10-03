@@ -31,6 +31,9 @@ import { getOrCreateDeviceId } from './utils/deviceId';
 import { ConflictResolver } from './ui/ConflictResolver';
 import { EasySyncSidebarView, EASY_SYNC_VIEW_TYPE } from './ui/SidebarView';
 
+/** Journal metadata key for durable last-sync sidebar summary (JSON string). */
+const LAST_SYNC_SUMMARY_KEY = 'lastSyncSummary';
+
 export default class EasySyncPlugin extends Plugin {
 	settings!: EasySyncSettings;
 
@@ -58,10 +61,11 @@ export default class EasySyncPlugin extends Plugin {
 		const vaultName = this.app.vault.getName();
 		this.syncJournal = new SyncJournal(vaultName);
 		await this.syncJournal.initialize();
+		await this.loadLastSyncSummary();
 
 		this.pathCodec = new SyncPathCodec(this.settings.syncPrefix);
 		this.payloadCodec = new SyncPayloadCodec();
-		this.changeTracker = new ChangeTracker(this.app);
+		this.changeTracker = new ChangeTracker(this);
 
 		this.syncEngine = new SyncEngine(
 			this.app,
@@ -86,6 +90,7 @@ export default class EasySyncPlugin extends Plugin {
 			},
 			onSyncComplete: (result) => {
 				this.lastSyncSummary = summaryFromResult(result);
+				void this.persistLastSyncSummary();
 				this.refreshSidebar();
 				const nonRecoverable = result.errors.find((error) => !error.recoverable);
 				if (nonRecoverable) {
@@ -98,6 +103,7 @@ export default class EasySyncPlugin extends Plugin {
 					status: 'error',
 					lastError: error,
 				};
+				void this.persistLastSyncSummary();
 				this.refreshSidebar();
 			},
 		});
@@ -308,6 +314,34 @@ export default class EasySyncPlugin extends Plugin {
 
 	getLastSyncSummary(): LastSyncSummary {
 		return this.lastSyncSummary;
+	}
+
+	/** Restore last-run summary from the journal so the sidebar survives reload. */
+	private async loadLastSyncSummary(): Promise<void> {
+		if (!this.syncJournal) return;
+		const raw = await this.syncJournal.getMetadata(LAST_SYNC_SUMMARY_KEY);
+		if (typeof raw !== 'string' || raw.length === 0) return;
+
+		try {
+			const parsed = JSON.parse(raw) as Partial<LastSyncSummary>;
+			const status = parsed.status === 'syncing' ? 'idle' : (parsed.status ?? 'idle');
+			this.lastSyncSummary = {
+				...EMPTY_SYNC_SUMMARY,
+				...parsed,
+				status,
+			};
+		} catch {
+			// Ignore corrupt persisted summary; next sync will rewrite it.
+		}
+	}
+
+	private async persistLastSyncSummary(): Promise<void> {
+		if (!this.syncJournal) return;
+		if (this.lastSyncSummary.status === 'syncing') return;
+		await this.syncJournal.setMetadata(
+			LAST_SYNC_SUMMARY_KEY,
+			JSON.stringify(this.lastSyncSummary),
+		);
 	}
 
 	getSyncJournal(): SyncJournal | null {

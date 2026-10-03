@@ -3,41 +3,41 @@
     {
       "id": "c1",
       "raised_by": "evaluator",
-      "status": "open",
+      "status": "addressed",
       "text": "Plan step 3 requires persisting the last-run sync summary for the sidebar. main.ts only keeps LastSyncSummary in memory; after reload the sidebar shows idle/zeros. Persist the summary (or rebuild an equivalent from durable state) across plugin reloads.",
-      "generator_response": null,
+      "generator_response": "Persisted LastSyncSummary in SyncJournal metadata key lastSyncSummary (JSON string). Loaded after journal.initialize() on onload; written on sync complete/error (not while status=syncing). Sidebar shows last run after reload.",
       "raised_at": "2026-10-03T16:13:58.051Z",
-      "addressed_at": null,
+      "addressed_at": "2026-10-03T16:15:44.528Z",
       "cleared_at": null
     },
     {
       "id": "c2",
       "raised_by": "evaluator",
-      "status": "open",
+      "status": "addressed",
       "text": "Accidental LOCAL_/REMOTE_ hard-exclusion remains: ChangeTracker.shouldExclude still uses isConflictFile, and paths.ts still documents/exports isConflictFile+getOriginalFromConflict as if the sync engine creates those artifacts. Plan forbids LOCAL_/REMOTE_ conflict artifacts — remove this hard-exclude path and stale helpers/docs so legitimate LOCAL_*/REMOTE_* notes are not ignored.",
-      "generator_response": null,
+      "generator_response": "Removed isConflictFile from ChangeTracker.shouldExclude. Deleted isConflictFile and getOriginalFromConflict exports/docs from paths.ts. Planner/executor still never create LOCAL_/REMOTE_ artifacts; conflicts stay journal+modal only. Legitimate LOCAL_*/REMOTE_* notes are no longer hard-excluded.",
       "raised_at": "2026-10-03T16:13:58.071Z",
-      "addressed_at": null,
+      "addressed_at": "2026-10-03T16:15:44.547Z",
       "cleared_at": null
     },
     {
       "id": "c3",
       "raised_by": "evaluator",
-      "status": "open",
+      "status": "addressed",
       "text": "SyncPayloadCodec.decodeAfterDownload ignores payloadFormat and treats any bytes (including xsalsa20poly1305-v1 from the reference plugin) as plaintext. With no encryption in v1, reject non-plaintext formats fail-closed instead of writing ciphertext into the vault; drop or stop exposing dead encryption API surface (isEncryptionEnabled always-false stub).",
-      "generator_response": null,
+      "generator_response": "SyncPayloadCodec.decodeAfterDownload now rejects any payloadFormat other than plaintext-v1 (absent treated as plaintext). Throws a clear error so encrypted xsalsa objects are not written into the vault. Removed isEncryptionEnabled stub.",
       "raised_at": "2026-10-03T16:13:58.094Z",
-      "addressed_at": null,
+      "addressed_at": "2026-10-03T16:15:44.567Z",
       "cleared_at": null
     },
     {
       "id": "c4",
       "raised_by": "evaluator",
-      "status": "open",
+      "status": "addressed",
       "text": "ChangeTracker registers vault listeners via vault.on/off instead of plugin.registerEvent/register*. Plan and Obsidian guidelines require register* cleanup; wire listeners through the Plugin instance so unload cannot leak handlers if stopTracking is skipped.",
-      "generator_response": null,
+      "generator_response": "ChangeTracker now takes Plugin and registers vault create/modify/delete/rename via plugin.registerEvent(EventRef). stopTracking uses vault.offref for early detach; unload still covered by registerEvent cleanup.",
       "raised_at": "2026-10-03T16:13:58.113Z",
-      "addressed_at": null,
+      "addressed_at": "2026-10-03T16:15:44.585Z",
       "cleared_at": null
     }
   ]

@@ -89,8 +89,8 @@ interface PathContext {
 	/** Unresolved conflict record from the journal, or `undefined` if none. */
 	conflict?: ConflictRecord;
 	/**
-	 * `true` when a `LOCAL_` or `REMOTE_` conflict artifact for this path was found on disk.
-	 * Used by the decision table to suppress further action until the user resolves the conflict.
+	 * `true` while a journal conflict awaits modal resolution (versions stay in place).
+	 * Kept as DecisionInput.hasConflictArtifacts for the decision-table contract.
 	 */
 	hasConflictArtifacts: boolean;
 	/**
@@ -183,13 +183,12 @@ export class SyncPlanner {
 	 * Aggregates all observable state into a map of {@link PathContext} objects, one per unique path.
 	 *
 	 * Performs four sequential passes:
-	 * 1. **Local files** — enumerates vault files; conflict artifacts (`LOCAL_`/`REMOTE_` prefixed)
-	 *    are skipped as data paths but their original path is flagged with `hasConflictArtifacts`.
+	 * 1. **Local files** — enumerates vault files (minus excludes / plugin-own paths).
 	 * 2. **Remote objects** — lists S3 objects under the sync prefix; metadata keys and excluded
 	 *    paths are skipped.
 	 * 3. **Journal baselines** — reads all stored `SyncStateRecord`s so the classifier can
 	 *    determine whether each side changed since the last successful sync.
-	 * 4. **Conflict records** — attaches any persisted unresolved-conflict records to their path.
+	 * 4. **Conflict records** — attaches unresolved journal conflicts (modal UX; no disk artifacts).
 	 *
 	 * Using `getOrCreate` across all four passes ensures that a path encountered only remotely
 	 * (e.g. a file deleted locally) still gets a context entry so the planner can schedule a
@@ -425,7 +424,7 @@ export class SyncPlanner {
 		if (isPluginOwnPath(path, this.app.vault.configDir)) return true;
 
 		const filename = getFilename(path);
-		if (filename.startsWith('.obsidian-s3-sync') || filename.startsWith('.easy-sync')) {
+		if (filename.startsWith('.easy-sync') || filename.startsWith('.easy-sync')) {
 			return true;
 		}
 

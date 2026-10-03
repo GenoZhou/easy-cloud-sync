@@ -16,7 +16,6 @@
  * - Join path segments safely, collapsing duplicate separators
  * - Match vault paths against glob patterns (supports `*` and `**`)
  * - Add/remove S3 prefix segments to translate between vault paths and S3 keys
- * - Detect and decode conflict artifact filenames (`LOCAL_*` / `REMOTE_*`)
  *
  * Used by: `SyncPathCodec`, `SyncPlanner`, `SnapshotCreator`, `RetentionManager`, and others.
  */
@@ -275,45 +274,6 @@ export function removePrefix(path: string, prefix: string): string | null {
 }
 
 /**
- * Determine whether a path represents a sync conflict artifact.
- *
- * The sync engine creates conflict files by prepending `LOCAL_` or `REMOTE_` to the
- * original filename when the same file has diverged on both sides of a sync. This
- * function inspects only the filename component (not the directory) to avoid false
- * positives from folder names.
- *
- * @param path - The vault-relative file path to inspect.
- * @returns `true` if the filename starts with `LOCAL_` or `REMOTE_`; `false` otherwise.
- *
- * @example
- * isConflictFile('Notes/LOCAL_note.md')  // → true
- * isConflictFile('Notes/REMOTE_note.md') // → true
- * isConflictFile('Notes/note.md')        // → false
- */
-export function isConflictFile(path: string): boolean {
-    const filename = getFilename(path);
-    return filename.startsWith('LOCAL_') || filename.startsWith('REMOTE_');
-}
-
-/**
- * Derive the original vault path from a conflict artifact path.
- *
- * Strips the `LOCAL_` (6 chars) or `REMOTE_` (7 chars) prefix from the filename and
- * reconstructs the full path with the original directory. Returns `null` if the path
- * is not a recognized conflict artifact (i.e. `isConflictFile` would return `false`).
- *
- * @param conflictPath - The vault-relative path of the conflict artifact
- *                       (e.g. `"Notes/LOCAL_note.md"`).
- * @returns The original vault path (e.g. `"Notes/note.md"`), or `null` if the path
- *          is not a conflict file.
- *
- * @example
- * getOriginalFromConflict('Notes/LOCAL_note.md')  // → 'Notes/note.md'
- * getOriginalFromConflict('Notes/REMOTE_note.md') // → 'Notes/note.md'
- * getOriginalFromConflict('LOCAL_note.md')         // → 'note.md'
- * getOriginalFromConflict('Notes/note.md')         // → null
- */
-/**
  * The plugin's manifest ID, used to construct the hardcoded exclusion path.
  * Must match the `id` field in `manifest.json`.
  */
@@ -322,33 +282,11 @@ const PLUGIN_ID = 'easy-sync';
 /**
  * Check whether a vault-relative path falls inside this plugin's own settings directory.
  *
- * This is a hardcoded, non-overridable exclusion to prevent the plugin from syncing
- * its own `data.json` (which may contain a saved passphrase) or any other plugin
- * artefact (`main.js`, `manifest.json`, `styles.css`) to S3.
- *
- * @param path      - The vault-relative file path to test.
- * @param configDir - The vault config directory name (from `app.vault.configDir`,
- *                    typically `".obsidian"`).
- * @returns `true` if the path is inside the plugin's settings folder.
+ * Hardcoded exclusion so the plugin never syncs its own `data.json` or other
+ * plugin artefacts (`main.js`, `manifest.json`, `styles.css`) to S3.
  */
 export function isPluginOwnPath(path: string, configDir: string): boolean {
 	const normalized = normalizePath(path);
 	const pluginDir = `${normalizePath(configDir)}/plugins/${PLUGIN_ID}/`;
 	return normalized.startsWith(pluginDir) || normalized === pluginDir.slice(0, -1);
-}
-
-export function getOriginalFromConflict(conflictPath: string): string | null {
-    const dir = getDirectory(conflictPath);
-    const filename = getFilename(conflictPath);
-
-    let originalFilename: string;
-    if (filename.startsWith('LOCAL_')) {
-        originalFilename = filename.substring(6);
-    } else if (filename.startsWith('REMOTE_')) {
-        originalFilename = filename.substring(7);
-    } else {
-        return null;
-    }
-
-    return dir ? `${dir}/${originalFilename}` : originalFilename;
 }

@@ -9,14 +9,11 @@ import { hashContent } from '../crypto/Hasher';
 import { PayloadFormat } from '../types';
 
 /**
- * Content hashing and pass-through encoding for vault sync.
- * Objects are stored as-is (no client-side encryption).
+ * Content hashing and plaintext-only encode/decode for vault sync.
+ * Non-plaintext S3 payload formats are rejected (fail-closed).
  */
 export class SyncPayloadCodec {
-	get isEncryptionEnabled(): boolean {
-		return false;
-	}
-
+	/** Easy Sync always uploads plaintext. */
 	getActivePayloadFormat(): PayloadFormat {
 		return 'plaintext-v1';
 	}
@@ -32,7 +29,18 @@ export class SyncPayloadCodec {
 			: plaintext;
 	}
 
-	decodeAfterDownload(payload: Uint8Array, _payloadFormat?: PayloadFormat): Uint8Array {
+	/**
+	 * Decode S3 bytes for the vault. Only `plaintext-v1` (or absent) is accepted.
+	 * Encrypted formats from other tools are rejected so ciphertext is never written.
+	 */
+	decodeAfterDownload(payload: Uint8Array, payloadFormat?: PayloadFormat): Uint8Array {
+		const format = payloadFormat ?? 'plaintext-v1';
+		if (format !== 'plaintext-v1') {
+			throw new Error(
+				`Unsupported payload format "${format}". Easy Sync v1 stores files as plaintext only ` +
+					'and cannot decrypt encrypted objects. Re-upload as plaintext or use a tool that supports decryption.',
+			);
+		}
 		return payload;
 	}
 

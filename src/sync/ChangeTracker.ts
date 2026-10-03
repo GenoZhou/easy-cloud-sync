@@ -27,14 +27,13 @@
  * without triggering a spurious immediate re-sync.
  *
  * ## Sync-aware event filtering
- * Files matching user-configured exclude patterns or recognised as conflict
- * artefacts (`LOCAL_` / `REMOTE_` prefixes) are silently dropped by
- * `shouldExclude()`.  Only `TFile` events are processed — folder events
- * (`TFolder`) are ignored because S3 has no real folder concept.
+ * Files matching user-configured exclude patterns or the plugin's own directory
+ * are silently dropped by `shouldExclude()`. Only `TFile` events are processed —
+ * folder events (`TFolder`) are ignored because S3 has no real folder concept.
  */
 
-import { App, TFile, TAbstractFile } from 'obsidian';
-import { isConflictFile, matchesAnyGlob, isPluginOwnPath } from '../utils/paths';
+import { App, EventRef, Plugin, TFile, TAbstractFile } from 'obsidian';
+import { matchesAnyGlob, isPluginOwnPath } from '../utils/paths';
 
 /**
  * Listens to Obsidian vault events and maintains a live set of file paths
@@ -51,33 +50,29 @@ import { isConflictFile, matchesAnyGlob, isPluginOwnPath } from '../utils/paths'
  * 6. Call `stopTracking()` during plugin unload.
  */
 export class ChangeTracker {
+	private plugin: Plugin;
 	private app: App;
 	private dirtyPaths: Set<string> = new Set();
 	private excludePatterns: string[] = [];
 	private isTracking = false;
+	private eventRefs: EventRef[] = [];
 
 	private syncingPaths: Set<string> = new Set();
 	private isSyncRunning = false;
 	private deferredDirty: Set<string> = new Set();
 
-	// Typed loosely for Obsidian Events.on/off (`(...data: unknown[]) => unknown`).
+	// Typed loosely for Obsidian Events.on (`(...data: unknown[]) => unknown`).
 	private onCreateHandler: (...data: unknown[]) => unknown;
 	private onModifyHandler: (...data: unknown[]) => unknown;
 	private onDeleteHandler: (...data: unknown[]) => unknown;
 	private onRenameHandler: (...data: unknown[]) => unknown;
 
 	/**
-	 * Creates a new ChangeTracker bound to the given Obsidian application.
-	 *
-	 * Event handler functions are bound here (rather than inline in
-	 * `startTracking`) so the same references can be passed to both
-	 * `vault.on()` and `vault.off()` — Obsidian requires identical function
-	 * references to successfully deregister a listener.
-	 *
-	 * @param app - The Obsidian `App` instance used to subscribe to vault events.
+	 * @param plugin - Plugin instance used for `registerEvent` cleanup on unload.
 	 */
-	constructor(app: App) {
-		this.app = app;
+	constructor(plugin: Plugin) {
+		this.plugin = plugin;
+		this.app = plugin.app;
 		this.onCreateHandler = (...data: unknown[]) => {
 			this.onEvent(data[0] as TAbstractFile);
 		};
@@ -93,38 +88,39 @@ export class ChangeTracker {
 	}
 
 	/**
-	 * Begins listening to vault events and populating the dirty-paths set.
-	 *
-	 * Calling this method more than once without an intervening `stopTracking`
-	 * is a no-op — duplicate listeners are not registered.
-	 *
-	 * @param excludePatterns - Glob patterns for paths that should never be
-	 *   considered dirty (e.g. globs matching `.DS_Store` or `.obsidian` files).
+	 * Begins listening to vault events via `plugin.registerEvent` so listeners
+	 * are cleaned up on plugin unload even if `stopTracking` is skipped.
 	 */
 	startTracking(excludePatterns: string[] = []): void {
 		if (this.isTracking) return;
 		this.excludePatterns = excludePatterns;
 		this.isTracking = true;
 
-		this.app.vault.on('create', this.onCreateHandler);
-		this.app.vault.on('modify', this.onModifyHandler);
-		this.app.vault.on('delete', this.onDeleteHandler);
-		this.app.vault.on('rename', this.onRenameHandler);
+		const createRef = this.app.vault.on('create', this.onCreateHandler);
+		const modifyRef = this.app.vault.on('modify', this.onModifyHandler);
+		const deleteRef = this.app.vault.on('delete', this.onDeleteHandler);
+		const renameRef = this.app.vault.on('rename', this.onRenameHandler);
+
+		// registerEvent ensures unload cleanup; keep refs for early stopTracking.
+		this.plugin.registerEvent(createRef);
+		this.plugin.registerEvent(modifyRef);
+		this.plugin.registerEvent(deleteRef);
+		this.plugin.registerEvent(renameRef);
+		this.eventRefs = [createRef, modifyRef, deleteRef, renameRef];
 	}
 
 	/**
-	 * Detaches all vault event listeners and stops populating dirty paths.
-	 *
-	 * Safe to call when tracking is already stopped.
+	 * Detaches vault listeners early (e.g. settings restart). Safe if already stopped.
+	 * Unload cleanup is also covered by `registerEvent`.
 	 */
 	stopTracking(): void {
 		if (!this.isTracking) return;
 		this.isTracking = false;
 
-		this.app.vault.off('create', this.onCreateHandler);
-		this.app.vault.off('modify', this.onModifyHandler);
-		this.app.vault.off('delete', this.onDeleteHandler);
-		this.app.vault.off('rename', this.onRenameHandler);
+		for (const ref of this.eventRefs) {
+			this.app.vault.offref(ref);
+		}
+		this.eventRefs = [];
 	}
 
 	/**
@@ -281,17 +277,11 @@ export class ChangeTracker {
 
 	/**
 	 * Returns `true` if `path` should be silently ignored by the tracker.
-	 *
-	 * A path is excluded when it is a conflict artefact (prefixed with
-	 * `LOCAL_` or `REMOTE_`) or when it matches one of the user-configured
-	 * glob exclude patterns.
-	 *
-	 * @param path - The vault-relative path to test.
-	 * @returns `true` if the path should be excluded from dirty tracking.
 	 */
 	private shouldExclude(path: string): boolean {
-		return isConflictFile(path)
-			|| isPluginOwnPath(path, this.app.vault.configDir)
-			|| matchesAnyGlob(path, this.excludePatterns);
+		return (
+			isPluginOwnPath(path, this.app.vault.configDir) ||
+			matchesAnyGlob(path, this.excludePatterns)
+		);
 	}
 }

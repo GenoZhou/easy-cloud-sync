@@ -247,16 +247,5 @@ export class EasySyncSettingTab extends PluginSettingTab {
 					this.plugin.onSettingsChanged();
 				});
 			});
-
-		new Setting(containerEl)
-			.setName('Debug logging')
-			.setDesc('Write verbose sync/backup logs to the developer console')
-			.addToggle((toggle) => {
-				toggle.setValue(this.plugin.settings.debugLogging);
-				toggle.onChange(async (value) => {
-					this.plugin.settings.debugLogging = value;
-					await this.plugin.saveSettings();
-				});
-			});
 	}
 }

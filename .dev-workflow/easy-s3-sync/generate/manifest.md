@@ -4,7 +4,7 @@ Status: ready
 
 ## Summary
 
-Implemented Easy Sync (`easy-sync`): S3/R2/custom sync via `@aws-sdk/client-s3` + Obsidian `requestUrl` handler, journal/planner/executor/scheduler (no encryption), conflict sidebar+modal (device/cloud labels, dated Keep both), ItemView ops sidebar (no status bar), manual backups with retain 5, Download zip, Restore overwrite-same-paths. Selectively ported from obsidian-s3-sync-and-backup (MIT).
+Easy Sync (`easy-sync`) with S3/R2/custom sync, journal planner/executor/scheduler (plaintext fail-closed), conflict sidebar+modal, ItemView ops sidebar (no status bar), manual backups retain-5. Claims c1–c4 fixed: durable last-sync summary in journal metadata; LOCAL_/REMOTE_ hard-excludes removed; encrypted payloads rejected; ChangeTracker uses plugin.registerEvent.
 
 ## Files
 
@@ -44,16 +44,16 @@ Implemented Easy Sync (`easy-sync`): S3/R2/custom sync via `@aws-sdk/client-s3` 
 - src/utils/paths.ts
 - src/utils/vaultFiles.ts
 - src/utils/retry.ts
-- src/utils/time.ts
 - src/utils/deviceId.ts
 - src/crypto/Hasher.ts
 - src/shims/setimmediate.cjs
 
 ## Deviations from plan
 
-- Command name for sidebar is **Open sidebar** (stable ID `easy-sync-open-sidebar`); ribbon/sidebar title keep brand **Easy Sync**.
-- ESLint overrides disable plugin-id-in-command-id / sentence-case / declarative settings-search so plan-required IDs and brand casing lint clean.
-- Journal IndexedDB prefix renamed to `easy-sync-journal-*` to avoid colliding with the reference plugin.
+- Sidebar command display name “Open sidebar” (ID `easy-sync-open-sidebar`).
+- ESLint overrides for plan-required command IDs / brand casing.
+- Last-sync summary persisted in journal metadata (`lastSyncSummary` JSON string), not settings knobs.
+- Removed unused `src/utils/time.ts` (status-bar leftover) and debug-logging settings toggle.
 
 ## How to verify
 
@@ -61,4 +61,4 @@ Implemented Easy Sync (`easy-sync`): S3/R2/custom sync via `@aws-sdk/client-s3` 
 npm install && npm run build && npm run lint
 ```
 
-Manual: configure R2/custom → Sync now → edit both sides → resolve conflict via sidebar modal → create 6 backups and confirm only 5 retained → restore overwrites same paths only. Confirm no status-bar UI is registered.
+Reload plugin after a sync — sidebar shows last run. Notes named LOCAL_*/REMOTE_* are tracked. Encrypted remote objects error instead of writing ciphertext. Unload cleans vault listeners via registerEvent.

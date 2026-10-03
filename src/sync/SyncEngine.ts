@@ -215,9 +215,8 @@ export class SyncEngine {
 			return result;
 		} catch (error) {
 			// Unexpected top-level failure (e.g. SyncPlanner threw, network
-			// unavailable before any item started).  Wrap as a SyncResult so
-			// callers always receive a uniform return type and can surface the
-			// error via the status bar without crashing the plugin.
+			// unavailable before any item started). Wrap as a SyncResult so
+			// callers always receive a uniform return type for the sidebar.
 			const message = error instanceof Error ? error.message : 'Unknown error';
 			console.error(`[S3 Sync] Sync failed: ${message}`);
 

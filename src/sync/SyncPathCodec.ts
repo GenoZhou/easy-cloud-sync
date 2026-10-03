@@ -15,30 +15,21 @@
 import { addPrefix, removePrefix, normalizePrefix } from '../utils/paths';
 
 /**
- * Hidden directory stored inside the sync prefix on S3.
- *
- * Contains plugin-internal objects (e.g. the encryption marker `.vault.enc`)
- * that must not be treated as user vault files.  The directory is prefixed
- * with a dot so it is hidden on most file browsers and is reliably detected
- * by `isMetadataKey()`.
+ * Hidden directory stored inside the sync prefix on S3 for plugin-internal
+ * objects that must not be treated as user vault files.
  */
-const METADATA_DIR = '.obsidian-s3-sync';
+const METADATA_DIR = '.easy-sync';
 
 /**
  * Converts vault-relative file paths to S3 object keys and back, applying
  * a configurable sync prefix to every key.
- *
- * All methods are pure transforms — no I/O is performed.  The codec is
- * constructed with a sync prefix (e.g. `"vault"`) and exposes helper
- * methods used by `SyncPlanner`, `SyncExecutor`, and `S3Provider` to
- * build or decode S3 keys without duplicating prefix logic.
  *
  * @example
  * ```ts
  * const codec = new SyncPathCodec('vault');
  * codec.localToRemote('Notes/readme.md'); // → 'vault/Notes/readme.md'
  * codec.remoteToLocal('vault/Notes/readme.md'); // → 'Notes/readme.md'
- * codec.isMetadataKey('vault/.obsidian-s3-sync/.vault.enc'); // → true
+ * codec.isMetadataKey('vault/.easy-sync/engine.json'); // → true
  * ```
  */
 export class SyncPathCodec {
@@ -97,7 +88,7 @@ export class SyncPathCodec {
 	 * metadata object rather than a user vault file.
 	 *
 	 * Metadata keys reside under the `METADATA_DIR` subdirectory inside the
-	 * sync prefix (e.g. `vault/.obsidian-s3-sync/...`).  The planner uses
+	 * sync prefix (e.g. `vault/.easy-sync/...`).  The planner uses
 	 * this check to skip metadata objects when listing remote vault files.
 	 *
 	 * @param remoteKey - The S3 object key to test.
@@ -127,7 +118,7 @@ export class SyncPathCodec {
 	 * Used when the engine needs to check whether the metadata directory
 	 * exists or when constructing keys for objects within it.
 	 *
-	 * @returns The prefixed metadata directory key, e.g. `"vault/.obsidian-s3-sync"`.
+	 * @returns The prefixed metadata directory key, e.g. `"vault/.easy-sync"`.
 	 */
 	getMetadataDir(): string {
 		return addPrefix(METADATA_DIR, this.normalizedPrefix);
@@ -140,7 +131,7 @@ export class SyncPathCodec {
 	 * to record which sync engine version initialised the bucket namespace.
 	 * Its presence allows future versions to detect and handle legacy layouts.
 	 *
-	 * @returns The prefixed engine marker key, e.g. `"vault/.obsidian-s3-sync/engine.json"`.
+	 * @returns The prefixed engine marker key, e.g. `"vault/.easy-sync/engine.json"`.
 	 */
 	getEngineMarkerKey(): string {
 		return addPrefix(`${METADATA_DIR}/engine.json`, this.normalizedPrefix);

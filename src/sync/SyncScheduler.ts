@@ -19,7 +19,6 @@ export class SyncScheduler {
 	private settings: EasySyncSettings;
 	private intervalId: number | null = null;
 	private isEnabled = false;
-	private isPaused = false;
 
 	private onSyncStart?: () => void;
 	private onSyncComplete?: (result: SyncResult) => void;
@@ -53,15 +52,12 @@ export class SyncScheduler {
 		if (this.isEnabled) return;
 
 		this.isEnabled = true;
-		this.isPaused = false;
 
 		const intervalMs = this.settings.syncIntervalMinutes * 60 * 1000;
 
 		this.intervalId = this.plugin.registerInterval(
 			window.setInterval(() => {
-				if (!this.isPaused) {
-					void this.triggerSync('scheduled');
-				}
+				void this.triggerSync('scheduled');
 			}, intervalMs),
 		);
 
@@ -81,23 +77,10 @@ export class SyncScheduler {
 		}
 
 		this.isEnabled = false;
-		this.isPaused = false;
 
 		if (this.settings.debugLogging) {
 			console.debug('[Easy Sync] Scheduler stopped');
 		}
-	}
-
-	pause(): void {
-		this.isPaused = true;
-	}
-
-	resume(): void {
-		this.isPaused = false;
-	}
-
-	getIsPaused(): boolean {
-		return this.isPaused;
 	}
 
 	async triggerSync(
