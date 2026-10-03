@@ -270,16 +270,27 @@ export class ConflictDiffView extends ItemView {
 		await this.closeToSidebar();
 	}
 
-	/** Refresh sidebar, reveal it, then close this diff leaf. */
+	/**
+	 * Close this diff leaf, then reveal the sidebar.
+	 * Reveal-before-detach expands the mobile drawer and then dismisses it
+	 * when the active leaf goes away — detach first.
+	 */
 	private async closeToSidebar(): Promise<void> {
+		this.plugin.refreshConflictUi();
 		try {
-			this.plugin.refreshConflictUi();
-			await this.plugin.activateSidebar();
 			this.leaf.detach();
 		} catch (error) {
-			this.noticeAndUnlock(error, 'Could not return to the sidebar');
+			this.noticeAndUnlock(error, 'Could not close the diff');
 			// Resolve may already have cleared the journal — reload instead of stale preview.
 			await this.reload();
+			return;
+		}
+		try {
+			await this.plugin.activateSidebar();
+		} catch (error) {
+			const message =
+				error instanceof Error ? error.message : 'Could not return to the sidebar';
+			new Notice(message);
 		}
 	}
 
