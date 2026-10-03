@@ -86,14 +86,14 @@
 	font-size: 0.85em;
 }
 
-/* Compact control for conflict-row actions (path + Show diff). */
+/* Compact row action (Show diff / Open file) — short, but still tappable. */
 .easy-sync-btn-inline {
 	flex: 0 0 auto;
 	align-self: center;
 	white-space: nowrap;
 	min-width: 0;
-	min-height: 0;
-	padding: 1px 8px;
+	min-height: 28px;
+	padding: 4px 10px;
 	font-size: 0.75em;
 	line-height: 1.2;
 	border-radius: 6px;

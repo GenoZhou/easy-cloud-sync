@@ -12,6 +12,7 @@ import {
 	loadConflictPreview,
 } from './conflictPreview';
 import { ConflictResolution } from './ConflictResolver';
+import { closeConflictDiffToSidebar } from './closeConflictDiff';
 import { collapseContextRuns } from '../utils/textDiff';
 
 export const EASY_SYNC_DIFF_VIEW_TYPE = 'easy-sync-conflict-diff';
@@ -270,28 +271,28 @@ export class ConflictDiffView extends ItemView {
 		await this.closeToSidebar();
 	}
 
-	/**
-	 * Close this diff leaf, then reveal the sidebar.
-	 * Reveal-before-detach expands the mobile drawer and then dismisses it
-	 * when the active leaf goes away — detach first.
-	 */
+	/** Close this diff leaf, then reveal the sidebar (detach before reveal). */
 	private async closeToSidebar(): Promise<void> {
-		this.plugin.refreshConflictUi();
-		try {
-			this.leaf.detach();
-		} catch (error) {
-			this.noticeAndUnlock(error, 'Could not close the diff');
+		const outcome = await closeConflictDiffToSidebar({
+			refreshConflictUi: () => this.plugin.refreshConflictUi(),
+			detachDiff: () => {
+				this.leaf.detach();
+			},
+			activateSidebar: () => this.plugin.activateSidebar(),
+		});
+
+		if (outcome.ok) return;
+
+		if (outcome.step === 'detach') {
+			this.noticeAndUnlock(outcome.error, 'Could not close the diff');
 			// Resolve may already have cleared the journal — reload instead of stale preview.
 			await this.reload();
 			return;
 		}
-		try {
-			await this.plugin.activateSidebar();
-		} catch (error) {
-			const message =
-				error instanceof Error ? error.message : 'Could not return to the sidebar';
-			new Notice(message);
-		}
+
+		const detail =
+			outcome.error instanceof Error ? outcome.error.message : 'Could not return to the sidebar';
+		new Notice(`${detail}. Use the ribbon icon to reopen Easy Sync.`);
 	}
 
 	/** Surface the error and clear the resolving lock; caller chooses render vs reload. */
