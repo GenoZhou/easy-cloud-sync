@@ -30,5 +30,8 @@ User ask: fix all findings; store credentials via Obsidian secret API.
 
 - Q1: SecretStorage only for Secret access key; Access key ID remains plain settings.
 - Q2: No migration (unpublished).
-- Q3–Q4 still open.
+- Q3–Q4: accept recommendations.
 
+## Round 1 complete
+
+Frontier empty — draft plan for confirmation.

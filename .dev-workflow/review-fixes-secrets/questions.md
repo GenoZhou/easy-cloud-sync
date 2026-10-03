@@ -19,7 +19,7 @@ Recommended: On load, if legacy plaintext `accessKeyId` / `secretAccessKey` are 
 Answer: **No migration** — plugin not published yet. Drop plaintext `secretAccessKey` from settings model cleanly; no legacy migrate path.
 
 ### Q3: Finding-fix approaches (bundle)
-Status: open
+Status: answered
 
 Confirm fix shapes for review findings 1–6:
 
@@ -32,9 +32,13 @@ Confirm fix shapes for review findings 1–6:
 
 Recommended: Accept all six as stated.
 
+Answer: Accept all six as recommended.
+
 ### Q4: Test runner
-Status: open
+Status: answered
 
 Which test stack for finding 6?
 
 Recommended: Node built-in `node:test` + `tsx` (or `ts-node`) for unit tests only — keep deps light vs porting reference Jest. No S3 integration tests in this topic.
+
+Answer: Accept recommendation — `node:test` + light TS runner; unit only.
