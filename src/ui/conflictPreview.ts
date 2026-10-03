@@ -1,5 +1,7 @@
 /**
  * Load device + cloud sides of a conflict for a mobile-friendly hunk preview.
+ *
+ * Full texts are diffed; only the first changed lines are shown in the card.
  */
 
 import { App, TFile } from 'obsidian';
@@ -17,6 +19,9 @@ import {
 /** Skip full-body download/diff when either side exceeds this (bytes). */
 export const MAX_INLINE_PREVIEW_BYTES = 512 * 1024;
 
+/** How many unified diff output lines to show in the card. */
+export const MAX_DIFF_DISPLAY_LINES = 48;
+
 export type ConflictPreviewKind = 'text' | 'binary' | 'unavailable';
 
 export interface ConflictPreview {
@@ -25,10 +30,10 @@ export interface ConflictPreview {
 	deviceMeta: string;
 	cloudMeta: string;
 	deviceAvailable: boolean;
-	/** Unified changed lines (device = del / cloud = add). */
+	/** First changed hunk lines only (device = del / cloud = add). */
 	diffLines: DiffLine[];
+	/** Changed/context lines not shown after the display cap. */
 	omittedDiffLines: number;
-	truncatedInput: boolean;
 	identical: boolean;
 	message?: string;
 }
@@ -67,7 +72,6 @@ export async function loadConflictPreview(
 			deviceAvailable,
 			diffLines: [],
 			omittedDiffLines: 0,
-			truncatedInput: false,
 			identical: false,
 			message: deviceAvailable
 				? 'Binary or non-text file — open the note to inspect the device copy.'
@@ -85,7 +89,6 @@ export async function loadConflictPreview(
 			deviceAvailable,
 			diffLines: [],
 			omittedDiffLines: 0,
-			truncatedInput: true,
 			identical: false,
 			message: deviceAvailable
 				? 'File too large for inline diff. Open the file to review.'
@@ -113,7 +116,6 @@ export async function loadConflictPreview(
 					deviceAvailable,
 					diffLines: [],
 					omittedDiffLines: 0,
-					truncatedInput: true,
 					identical: false,
 					message: 'Cloud object too large for inline diff. Open the file if present locally.',
 				};
@@ -134,7 +136,6 @@ export async function loadConflictPreview(
 			deviceAvailable,
 			diffLines: [],
 			omittedDiffLines: 0,
-			truncatedInput: false,
 			identical: false,
 			message,
 		};
@@ -149,21 +150,18 @@ export async function loadConflictPreview(
 			deviceAvailable: false,
 			diffLines: [],
 			omittedDiffLines: 0,
-			truncatedInput: false,
 			identical: false,
 			message: 'Neither device nor cloud content is available.',
 		};
 	}
 
+	// Full-file diff; only the first changed hunk lines are shown in the card.
 	const diff = buildUnifiedHunks(deviceText ?? '', cloudText ?? '');
-	const flat = flattenHunksForDisplay(diff.hunks, 48);
+	const flat = flattenHunksForDisplay(diff.hunks, MAX_DIFF_DISPLAY_LINES);
 
 	let message: string | undefined;
 	if (diff.identical) {
 		message = 'Contents match (metadata still conflicted). Choose a side to clear.';
-	} else if (diff.truncated && flat.lines.length === 0) {
-		message =
-			'Compared only the first 800 lines (they match). Later lines may still differ — open the file.';
 	} else if (!deviceAvailable) {
 		message = 'Not on this device — showing the cloud copy as additions.';
 	}
@@ -176,7 +174,6 @@ export async function loadConflictPreview(
 		deviceAvailable,
 		diffLines: flat.lines,
 		omittedDiffLines: flat.omitted,
-		truncatedInput: diff.truncated,
 		identical: diff.identical,
 		message,
 	};

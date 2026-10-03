@@ -6,7 +6,6 @@ describe('buildUnifiedHunks', () => {
 	it('returns identical for the same text', () => {
 		const result = buildUnifiedHunks('a\nb\n', 'a\nb\n');
 		assert.equal(result.identical, true);
-		assert.equal(result.truncated, false);
 		assert.equal(result.hunks.length, 0);
 	});
 
@@ -19,18 +18,19 @@ describe('buildUnifiedHunks', () => {
 		assert.ok(kinds.includes('add'));
 	});
 
-	it('does not report identical when only a truncated prefix matches', () => {
-		const device = Array.from({ length: 900 }, (_, i) => `line-${i}`).join('\n');
-		const cloud =
-			Array.from({ length: 800 }, (_, i) => `line-${i}`).join('\n') +
-			'\n' +
-			Array.from({ length: 100 }, (_, i) => `cloud-only-${i}`).join('\n');
+	it('finds a change near the end of a long file', () => {
+		const head = Array.from({ length: 900 }, (_, i) => `line-${i}`);
+		const device = [...head, 'device-tail'].join('\n');
+		const cloud = [...head, 'cloud-tail'].join('\n');
 		const result = buildUnifiedHunks(device, cloud);
-		assert.equal(result.truncated, true);
 		assert.equal(result.identical, false);
+		assert.ok(result.hunks.length >= 1);
+		const texts = result.hunks.flatMap((h) => h.lines.map((l) => l.text));
+		assert.ok(texts.includes('device-tail'));
+		assert.ok(texts.includes('cloud-tail'));
 	});
 
-	it('caps display lines and reports omitted count', () => {
+	it('display flatten keeps only the first changed lines', () => {
 		const device = Array.from({ length: 40 }, (_, i) => `L${i}`).join('\n');
 		const cloud = Array.from({ length: 40 }, (_, i) => `R${i}`).join('\n');
 		const { hunks } = buildUnifiedHunks(device, cloud);

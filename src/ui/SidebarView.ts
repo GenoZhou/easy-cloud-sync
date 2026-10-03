@@ -274,17 +274,11 @@ export class EasySyncSidebarView extends ItemView {
 			});
 		}
 
-		if (preview.omittedDiffLines > 0 || preview.truncatedInput) {
-			const note = host.createEl('p', { cls: 'easy-sync-muted' });
-			const parts: string[] = [];
-			if (preview.truncatedInput) {
-				parts.push('Large file — only the first part was compared.');
-			}
-			if (preview.omittedDiffLines > 0) {
-				parts.push(`${preview.omittedDiffLines} more changed lines not shown.`);
-			}
-			parts.push('Open the file to review the rest.');
-			note.setText(parts.join(' '));
+		if (preview.omittedDiffLines > 0) {
+			host.createEl('p', {
+				cls: 'easy-sync-muted',
+				text: `${preview.omittedDiffLines} more changed lines not shown. Open the file to review the rest.`,
+			});
 		}
 
 		if (preview.message) {
@@ -432,7 +426,6 @@ export class EasySyncSidebarView extends ItemView {
 				deviceAvailable: this.app.vault.getAbstractFileByPath(path) instanceof TFile,
 				diffLines: [],
 				omittedDiffLines: 0,
-				truncatedInput: false,
 				identical: false,
 				message,
 			};

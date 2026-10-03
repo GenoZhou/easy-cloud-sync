@@ -1,6 +1,8 @@
 /**
  * Line-oriented unified diff focused on changed hunks (mobile-friendly).
  * Device text is treated as the “old” side; cloud as the “new” side.
+ *
+ * Compares the full texts; callers limit how many changed lines are shown.
  */
 
 export type DiffLineKind = 'context' | 'add' | 'del';
@@ -22,45 +24,38 @@ export interface DiffHunk {
 
 export interface DiffResult {
 	hunks: DiffHunk[];
-	/** True when inputs were truncated before diffing. */
-	truncated: boolean;
 	identical: boolean;
 }
 
-const MAX_LINES_PER_SIDE = 800;
 const DEFAULT_CONTEXT = 2;
 
 /**
- * Build unified hunks for changed regions only.
- * Caps each side at {@link MAX_LINES_PER_SIDE} lines for responsiveness.
+ * Build unified hunks for every changed region in the full texts.
  */
 export function buildUnifiedHunks(
 	deviceText: string,
 	cloudText: string,
 	context: number = DEFAULT_CONTEXT,
 ): DiffResult {
-	const deviceRaw = splitLines(deviceText);
-	const cloudRaw = splitLines(cloudText);
-	const truncated =
-		deviceRaw.length > MAX_LINES_PER_SIDE || cloudRaw.length > MAX_LINES_PER_SIDE;
-	const deviceLines = deviceRaw.slice(0, MAX_LINES_PER_SIDE);
-	const cloudLines = cloudRaw.slice(0, MAX_LINES_PER_SIDE);
+	const deviceLines = splitLines(deviceText);
+	const cloudLines = splitLines(cloudText);
 
-	const prefixesEqual =
+	if (
 		deviceLines.length === cloudLines.length &&
-		deviceLines.every((line, i) => line === cloudLines[i]);
-
-	if (prefixesEqual) {
-		// Truncated equal prefixes must NOT report identical — unread tails may differ.
-		return { hunks: [], truncated, identical: !truncated };
+		deviceLines.every((line, i) => line === cloudLines[i])
+	) {
+		return { hunks: [], identical: true };
 	}
 
 	const edits = myersDiff(deviceLines, cloudLines);
 	const hunks = groupIntoHunks(edits, context);
-	return { hunks, truncated, identical: !truncated && hunks.length === 0 };
+	return { hunks, identical: hunks.length === 0 };
 }
 
-/** Flatten hunks for display, capping total rendered lines. */
+/**
+ * Flatten hunks for display, keeping only the first {@link maxLines} output lines
+ * (changed hunks with context). Remaining changed lines are counted as omitted.
+ */
 export function flattenHunksForDisplay(
 	hunks: DiffHunk[],
 	maxLines: number = 48,
