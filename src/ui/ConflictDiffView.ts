@@ -249,7 +249,7 @@ export class ConflictDiffView extends ItemView {
 			await resolver.resolve(path, resolution);
 			new Notice(`Conflict resolved: ${path}`);
 		} catch (error) {
-			this.failUi(error, 'Resolve failed');
+			this.noticeAndUnlock(error, 'Resolve failed');
 			this.render();
 			return;
 		}
@@ -265,13 +265,14 @@ export class ConflictDiffView extends ItemView {
 			await this.plugin.activateSidebar();
 			this.leaf.detach();
 		} catch (error) {
-			this.failUi(error, 'Could not return to the sidebar');
+			this.noticeAndUnlock(error, 'Could not return to the sidebar');
 			// Resolve may already have cleared the journal — reload instead of stale preview.
 			await this.reload();
 		}
 	}
 
-	private failUi(error: unknown, fallback: string): void {
+	/** Surface the error and clear the resolving lock; caller chooses render vs reload. */
+	private noticeAndUnlock(error: unknown, fallback: string): void {
 		const message = error instanceof Error ? error.message : fallback;
 		new Notice(message);
 		this.resolving = false;

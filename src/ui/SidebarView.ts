@@ -234,7 +234,6 @@ export class EasySyncSidebarView extends ItemView {
 }
 
 function formatStatLine(summary: LastSyncSummary, openConflictCount: number): string {
-	// openConflictCount is the live journal list length (not last-sync summary).
 	return (
 		`\u2191${summary.filesUploaded} \u2193${summary.filesDownloaded} \u00d7${summary.filesDeleted}` +
 		` · ${openConflictCount} conflicts · ${summary.filesSkipped} skipped`
