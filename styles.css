@@ -120,17 +120,21 @@
 	border-bottom: 1px solid var(--background-modifier-border);
 }
 
-.easy-sync-backup-meta {
-	font-size: 0.85em;
-	margin-bottom: 6px;
-}
-
-/* Conflict list — path + Show diff on one row */
+/* Backup / conflict rows — meta + action on one line */
+.easy-sync-backup-row,
 .easy-sync-conflict-row {
 	display: flex;
 	align-items: center;
 	gap: 8px;
 	min-width: 0;
+}
+
+.easy-sync-backup-meta {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-size: 0.85em;
+	margin: 0;
+	overflow-wrap: anywhere;
 }
 
 .easy-sync-conflict-path {
