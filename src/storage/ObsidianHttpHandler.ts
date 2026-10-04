@@ -135,16 +135,9 @@ export class ObsidianHttpHandler {
 
             console.debug(`[S3 HTTP] Response: ${obsidianResponse.status}`);
 
-            // Normalize header names, then always drop Date/Age. Stale Dates on
-            // 404/403 during sync must not poison systemClockOffset; skew
-            // recovery uses RequestTimeTooSkewed.ServerTime from the XML body.
-            const rawHeaders: Record<string, string> = {};
-            if (obsidianResponse.headers) {
-                for (const [key, value] of Object.entries(obsidianResponse.headers)) {
-                    rawHeaders[key.toLowerCase()] = value;
-                }
-            }
-            const responseHeaders = filterResponseHeadersForAwsSdk(rawHeaders);
+            const responseHeaders = filterResponseHeadersForAwsSdk(
+                obsidianResponse.headers ?? {},
+            );
 
 			const responseBody = this.createResponseBody(obsidianResponse.arrayBuffer);
 

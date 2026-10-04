@@ -202,7 +202,7 @@ export default class EasySyncPlugin extends Plugin {
 		if (!isConnectionConfigured(this.app, this.settings)) {
 			throw new Error(t().notices.configureBeforeSync);
 		}
-		if (this.syncEngine?.isInProgress()) {
+		if (this.isSyncInProgress()) {
 			throw new Error(t().notices.syncInProgress);
 		}
 
@@ -267,7 +267,7 @@ export default class EasySyncPlugin extends Plugin {
 			return;
 		}
 
-		if (this.syncEngine?.isInProgress()) {
+		if (this.isSyncInProgress()) {
 			new Notice(t().notices.syncInProgress);
 			return;
 		}

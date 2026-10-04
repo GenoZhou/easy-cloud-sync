@@ -21,20 +21,22 @@ import type { S3Client } from '@aws-sdk/client-s3';
 
 const CLOCK_HEADERS = new Set(['date', 'age']);
 
-/**
- * Drop `Date` / `Age` from all responses. Real skew recovery uses the
- * `ServerTime` field on `RequestTimeTooSkewed` errors (parsed from the XML
- * body), not the HTTP Date header.
- */
+/** Mutable clock config used by offset helpers (matches S3Client.config). */
+export type ClockOffsetClient = {
+	config: { systemClockOffset: number };
+};
+
+/** Lowercase header names and drop `Date` / `Age` in one pass. */
 export function filterResponseHeadersForAwsSdk(
 	headers: Record<string, string>,
 ): Record<string, string> {
 	const filtered: Record<string, string> = {};
 	for (const [key, value] of Object.entries(headers)) {
-		if (CLOCK_HEADERS.has(key.toLowerCase())) {
+		const lower = key.toLowerCase();
+		if (CLOCK_HEADERS.has(lower)) {
 			continue;
 		}
-		filtered[key] = value;
+		filtered[lower] = value;
 	}
 	return filtered;
 }
@@ -50,10 +52,7 @@ export function isRequestTimeTooSkewed(error: unknown): boolean {
 	return typeof err.message === 'string' && err.message.includes('RequestTimeTooSkewed');
 }
 
-/**
- * Parse server UTC millis from a skew error's `ServerTime` only.
- * Do not use HTTP `Date` — it is what Obsidian/proxies may forge or cache.
- */
+/** Parse server UTC millis from XML `ServerTime` only — never HTTP `Date`. */
 export function serverTimeFromSkewError(error: unknown): number | undefined {
 	if (!error || typeof error !== 'object') {
 		return undefined;
@@ -67,22 +66,18 @@ export function serverTimeFromSkewError(error: unknown): number | undefined {
 }
 
 export function applySystemClockOffset(
-	client: { config: { systemClockOffset: number } },
+	client: ClockOffsetClient,
 	serverTimeMs: number,
 	nowMs: number = Date.now(),
 ): void {
 	client.config.systemClockOffset = serverTimeMs - nowMs;
 }
 
-/** Mutable clock config used by the retry middleware (matches S3Client.config). */
-export type ClockOffsetClient = {
-	config: { systemClockOffset: number };
-};
+export function clearSystemClockOffset(client: ClockOffsetClient): void {
+	client.config.systemClockOffset = 0;
+}
 
-/**
- * Build the initialize-step middleware that retries once after applying
- * `ServerTime`. Exported for unit tests without standing up a full client.
- */
+/** Initialize-step middleware: one ServerTime correction + retry. Exported for tests. */
 export function createClockSkewRetryMiddleware(client: ClockOffsetClient) {
 	return (next: (args: unknown) => Promise<unknown>) =>
 		async (args: unknown): Promise<unknown> => {
@@ -102,20 +97,11 @@ export function createClockSkewRetryMiddleware(client: ClockOffsetClient) {
 		};
 }
 
-/**
- * Retry once after applying server time when the SDK's built-in skew retry
- * misses a sibling (common with SyncExecutor's parallel S3 calls).
- */
 export function installClockSkewRetryMiddleware(client: S3Client): void {
-	const retry = createClockSkewRetryMiddleware(client);
-	// Smithy middleware generics are command-specific; the runtime contract is
-	// (next) => (args) => Promise — cast at the stack boundary only.
-	client.middlewareStack.add(
-		((next: (args: unknown) => Promise<unknown>) => retry(next)) as never,
-		{
-			name: 'easySyncClockSkewRetry',
-			priority: 'low',
-			override: true,
-		},
-	);
+	// Smithy middleware generics are command-specific; cast at the stack boundary.
+	client.middlewareStack.add(createClockSkewRetryMiddleware(client) as never, {
+		name: 'easySyncClockSkewRetry',
+		priority: 'low',
+		override: true,
+	});
 }

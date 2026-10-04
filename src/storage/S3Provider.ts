@@ -49,7 +49,7 @@ import {
 	resolveSecretAccessKey,
 	validateConnectionSettings,
 } from './S3Config';
-import { installClockSkewRetryMiddleware } from './clockSkew';
+import { clearSystemClockOffset, installClockSkewRetryMiddleware } from './clockSkew';
 
 /**
  * S3Provider class
@@ -113,26 +113,16 @@ export class S3Provider {
      */
     updateSettings(settings: EasySyncSettings): void {
         this.settings = settings;
-        this.invalidateClient();
-    }
-
-    /**
-     * Drop the cached `S3Client` so the next operation rebuilds it.
-     * Safe when no in-flight sync holds the old instance for new calls;
-     * prefer {@link resetSystemClockOffset} if a sync may be running.
-     */
-    invalidateClient(): void {
         this.destroy();
     }
 
     /**
      * Clear a poisoned `systemClockOffset` without destroying the client.
-     * Safe to call during an in-flight sync (in-progress requests keep their
-     * already-signed headers; subsequent signs use offset 0).
+     * Safe during an in-flight sync; subsequent signs use offset 0.
      */
     resetSystemClockOffset(): void {
         if (this.client) {
-            this.client.config.systemClockOffset = 0;
+            clearSystemClockOffset(this.client);
         }
     }
 
@@ -150,7 +140,6 @@ export class S3Provider {
             }
             const config = buildS3ClientConfig(this.settings, secretAccessKey);
             this.client = new S3Client(config);
-            // Guard parallel sync uploads/downloads against missed SDK skew retries.
             installClockSkewRetryMiddleware(this.client);
         }
         return this.client;

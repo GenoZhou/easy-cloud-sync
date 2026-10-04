@@ -4,6 +4,7 @@ import { HeadBucketCommand, S3Client } from '@aws-sdk/client-s3';
 import { HttpResponse } from '@smithy/protocol-http';
 import {
 	applySystemClockOffset,
+	clearSystemClockOffset,
 	createClockSkewRetryMiddleware,
 	filterResponseHeadersForAwsSdk,
 	installClockSkewRetryMiddleware,
@@ -12,12 +13,12 @@ import {
 } from '../src/storage/clockSkew';
 
 describe('clock skew response filtering', () => {
-	it('strips Date and Age from successful responses', () => {
+	it('lowercases keys and strips Date and Age', () => {
 		const filtered = filterResponseHeadersForAwsSdk({
-			date: 'Wed, 01 Jan 2020 00:00:00 GMT',
-			age: '120',
-			etag: '"abc"',
-			'x-amz-request-id': 'req-1',
+			Date: 'Wed, 01 Jan 2020 00:00:00 GMT',
+			Age: '120',
+			ETag: '"abc"',
+			'X-Amz-Request-Id': 'req-1',
 		});
 		assert.deepEqual(filtered, {
 			etag: '"abc"',
@@ -25,7 +26,7 @@ describe('clock skew response filtering', () => {
 		});
 	});
 
-	it('strips Date and Age from 404/403 responses too (no re-poison via errors)', () => {
+	it('strips Date and Age from error responses too', () => {
 		const filtered = filterResponseHeadersForAwsSdk({
 			date: 'Wed, 01 Jan 2020 00:00:00 GMT',
 			age: '0',
@@ -66,10 +67,12 @@ describe('clock skew error helpers', () => {
 		assert.equal(serverTimeFromSkewError({ ServerTime: 'not-a-date' }), undefined);
 	});
 
-	it('applies systemClockOffset as serverTime - now', () => {
+	it('applies and clears systemClockOffset', () => {
 		const client = { config: { systemClockOffset: 0 } };
 		applySystemClockOffset(client, 1_000_000, 900_000);
 		assert.equal(client.config.systemClockOffset, 100_000);
+		clearSystemClockOffset(client);
+		assert.equal(client.config.systemClockOffset, 0);
 	});
 });
 
