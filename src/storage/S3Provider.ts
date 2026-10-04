@@ -49,6 +49,7 @@ import {
 	resolveSecretAccessKey,
 	validateConnectionSettings,
 } from './S3Config';
+import { clearSystemClockOffset, installClockSkewRetryMiddleware } from './clockSkew';
 
 /**
  * S3Provider class
@@ -112,7 +113,17 @@ export class S3Provider {
      */
     updateSettings(settings: EasySyncSettings): void {
         this.settings = settings;
-        this.client = null; // Force client recreation on next use
+        this.destroy();
+    }
+
+    /**
+     * Clear a poisoned `systemClockOffset` without destroying the client.
+     * Safe during an in-flight sync; subsequent signs use offset 0.
+     */
+    resetSystemClockOffset(): void {
+        if (this.client) {
+            clearSystemClockOffset(this.client);
+        }
     }
 
     /**
@@ -129,6 +140,7 @@ export class S3Provider {
             }
             const config = buildS3ClientConfig(this.settings, secretAccessKey);
             this.client = new S3Client(config);
+            installClockSkewRetryMiddleware(this.client);
         }
         return this.client;
     }

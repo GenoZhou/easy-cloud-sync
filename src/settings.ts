@@ -164,6 +164,14 @@ export class EasySyncSettingTab extends PluginSettingTab {
 					try {
 						const provider = new S3Provider(this.plugin.settings, this.app);
 						const message = await provider.testConnection();
+						// Fresh HeadBucket succeeded with offset 0. Rebuild the shared
+						// client when idle; during sync only clear a poisoned offset.
+						const shared = this.plugin.getS3Provider();
+						if (this.plugin.isSyncInProgress()) {
+							shared?.resetSystemClockOffset();
+						} else {
+							shared?.destroy();
+						}
 						new Notice(message);
 					} catch (error) {
 						const message =

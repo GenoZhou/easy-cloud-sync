@@ -32,6 +32,7 @@
 import { requestUrl, RequestUrlParam } from 'obsidian';
 import { HttpRequest, HttpResponse } from '@smithy/protocol-http';
 import { HttpHandlerOptions } from '@smithy/types';
+import { filterResponseHeadersForAwsSdk } from './clockSkew';
 
 /**
  * AWS SDK v3 `HttpHandler` implementation that routes all S3 requests through
@@ -134,13 +135,9 @@ export class ObsidianHttpHandler {
 
             console.debug(`[S3 HTTP] Response: ${obsidianResponse.status}`);
 
-            // Convert response headers
-            const responseHeaders: Record<string, string> = {};
-            if (obsidianResponse.headers) {
-                for (const [key, value] of Object.entries(obsidianResponse.headers)) {
-                    responseHeaders[key.toLowerCase()] = value;
-                }
-            }
+            const responseHeaders = filterResponseHeadersForAwsSdk(
+                obsidianResponse.headers ?? {},
+            );
 
 			const responseBody = this.createResponseBody(obsidianResponse.arrayBuffer);
 
