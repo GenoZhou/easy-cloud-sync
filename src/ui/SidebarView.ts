@@ -93,7 +93,7 @@ export class EasySyncSidebarView extends ItemView {
 					}
 				).setting;
 				setting.open();
-				setting.openTabById('easy-sync-s3');
+				setting.openTabById(this.plugin.manifest.id);
 			});
 			return;
 		}

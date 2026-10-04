@@ -4,7 +4,7 @@ Obsidian community plugin that syncs your vault to **AWS S3**, **Cloudflare R2**
 
 中文说明见 [README.zh.md](./README.zh.md)。UI language follows Obsidian (`getLanguage()`): Chinese locales use Chinese copy; everything else uses English.
 
-> **Note:** Plugin id is `easy-sync-s3` (community id `easy-sync` is already taken by an unrelated OneDrive plugin).
+> **Note:** Plugin id is `easy-cloud-sync` (community id `easy-sync` is already taken by an unrelated OneDrive plugin; `easy-sync-s3` is invalid because new ids cannot contain digits).
 
 ## Features
 
@@ -30,7 +30,7 @@ Obsidian community plugin that syncs your vault to **AWS S3**, **Cloudflare R2**
 2. Open **Settings → Easy Sync S3** and configure provider, bucket, access key ID, and secret access key (via secret storage), plus prefixes.
 3. Use **Test connection**, then open the **Easy Sync S3** sidebar (ribbon or command) and select **Sync now**.
 
-If you previously installed a beta under `.obsidian/plugins/easy-sync/`, move or reinstall into `.obsidian/plugins/easy-sync-s3/` and disable the old folder copy.
+If you previously installed a beta under `.obsidian/plugins/easy-sync/` or `.obsidian/plugins/easy-sync-s3/`, move or reinstall into `.obsidian/plugins/easy-cloud-sync/` and disable the old folder copy.
 
 ## Commands
 
@@ -50,7 +50,7 @@ npm run lint
 npm test       # unit tests (node:test + tsx)
 ```
 
-Copy `main.js`, `manifest.json`, and `styles.css` into `<Vault>/.obsidian/plugins/easy-sync-s3/`.
+Copy `main.js`, `manifest.json`, and `styles.css` into `<Vault>/.obsidian/plugins/easy-cloud-sync/`.
 
 ## Attribution
 

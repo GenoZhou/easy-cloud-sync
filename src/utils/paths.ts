@@ -277,7 +277,7 @@ export function removePrefix(path: string, prefix: string): string | null {
  * The plugin's manifest ID, used to construct the hardcoded exclusion path.
  * Must match the `id` field in `manifest.json`.
  */
-const PLUGIN_ID = 'easy-sync-s3';
+const PLUGIN_ID = 'easy-cloud-sync';
 
 /**
  * Check whether a vault-relative path falls inside this plugin's own settings directory.

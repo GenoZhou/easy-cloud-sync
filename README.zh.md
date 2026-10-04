@@ -4,7 +4,7 @@ Obsidian 社区插件：将笔记库同步到 **AWS S3**、**Cloudflare R2** 或
 
 界面语言跟随 Obsidian（`getLanguage()`）：中文界面显示中文文案，其他语言使用英文。完整英文说明见 [README.md](./README.md)。
 
-> **说明：** 插件 id 为 `easy-sync-s3`（社区 id `easy-sync` 已被无关的 OneDrive 插件占用）。
+> **说明：** 插件 id 为 `easy-cloud-sync`（社区 id `easy-sync` 已被无关的 OneDrive 插件占用；`easy-sync-s3` 因新 id 不能含数字而无效）。
 
 ## 功能
 
@@ -30,7 +30,7 @@ Obsidian 社区插件：将笔记库同步到 **AWS S3**、**Cloudflare R2** 或
 2. 打开 **设置 → Easy Sync S3**，配置服务商、存储桶、Access key ID、Secret access key（密钥存储）与前缀。
 3. 使用 **测试连接**，然后打开 **Easy Sync S3** 侧边栏（功能区或命令），选择 **立即同步**。
 
-若此前 beta 安装在 `.obsidian/plugins/easy-sync/`，请改用（或迁移到）`.obsidian/plugins/easy-sync-s3/`，并停用旧目录副本。
+若此前 beta 安装在 `.obsidian/plugins/easy-sync/` 或 `.obsidian/plugins/easy-sync-s3/`，请改用（或迁移到）`.obsidian/plugins/easy-cloud-sync/`，并停用旧目录副本。
 
 ## 命令
 
@@ -50,7 +50,7 @@ npm run lint
 npm test       # 单元测试（node:test + tsx）
 ```
 
-将 `main.js`、`manifest.json`、`styles.css` 复制到 `<Vault>/.obsidian/plugins/easy-sync-s3/`。
+将 `main.js`、`manifest.json`、`styles.css` 复制到 `<Vault>/.obsidian/plugins/easy-cloud-sync/`。
 
 ## 致谢
 
