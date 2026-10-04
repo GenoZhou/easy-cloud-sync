@@ -1,8 +1,10 @@
-# Easy Sync
+# Easy Sync S3
 
 Obsidian 社区插件：将笔记库同步到 **AWS S3**、**Cloudflare R2** 或任意 **S3 兼容** 端点；支持手动快照备份（保留最近 5 份）与冲突界面（不使用 `LOCAL_` / `REMOTE_` 文件名）。
 
 界面语言跟随 Obsidian（`getLanguage()`）：中文界面显示中文文案，其他语言使用英文。完整英文说明见 [README.md](./README.md)。
+
+> **说明：** 插件 id 为 `easy-sync-s3`（社区 id `easy-sync` 已被无关的 OneDrive 插件占用）。
 
 ## 功能
 
@@ -11,7 +13,7 @@ Obsidian 社区插件：将笔记库同步到 **AWS S3**、**Cloudflare R2** 或
 - 启动时同步、按间隔同步（1–30 分钟，默认 5），以及 **立即同步**
 - 侧边栏：上次同步摘要、冲突列表、备份
 - 冲突：侧边栏列出未解决路径；**查看差异** 打开独立页面（− 本机 / + 云端）并提供「保留本机 / 保留云端 / 暂时跳过」
-- 手动备份；保留最新 5 份；下载 zip；恢复（仅覆盖同路径）
+- 手动备份；保留最新 5 份；恢复（仅覆盖同路径）
 - **高级 → 重置本地（基于云端）**：清除同步日志后，用云端覆盖本机
 - **高级 → 重置云端（基于本地）**：清除同步日志后，用本机覆盖云端
 
@@ -25,8 +27,10 @@ Obsidian 社区插件：将笔记库同步到 **AWS S3**、**Cloudflare R2** 或
 ## 安装与设置
 
 1. 安装并启用插件（**设置 → 社区插件**，Obsidian 1.11.4+）。
-2. 打开 **设置 → Easy Sync**，配置服务商、存储桶、Access key ID、Secret access key（密钥存储）与前缀。
-3. 使用 **测试连接**，然后打开 **Easy Sync** 侧边栏（功能区或命令），选择 **立即同步**。
+2. 打开 **设置 → Easy Sync S3**，配置服务商、存储桶、Access key ID、Secret access key（密钥存储）与前缀。
+3. 使用 **测试连接**，然后打开 **Easy Sync S3** 侧边栏（功能区或命令），选择 **立即同步**。
+
+若此前 beta 安装在 `.obsidian/plugins/easy-sync/`，请改用（或迁移到）`.obsidian/plugins/easy-sync-s3/`，并停用旧目录副本。
 
 ## 命令
 
@@ -46,7 +50,7 @@ npm run lint
 npm test       # 单元测试（node:test + tsx）
 ```
 
-将 `main.js`、`manifest.json`、`styles.css` 复制到 `<Vault>/.obsidian/plugins/easy-sync/`。
+将 `main.js`、`manifest.json`、`styles.css` 复制到 `<Vault>/.obsidian/plugins/easy-sync-s3/`。
 
 ## 致谢
 
