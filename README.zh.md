@@ -21,12 +21,12 @@ Obsidian 社区插件：将笔记库同步到 **AWS S3**、**Cloudflare R2** 或
 
 - **v1 无客户端加密** — 对象按原样存储。持有存储桶凭证即可读取库内容。
 - 网络请求仅发往你配置的 S3 兼容端点。无遥测。
-- **Secret access key** 通过 Obsidian **密钥存储**保存（需 Obsidian 1.11.4+）。本插件只在 `data.json` 中保存密钥名称（`secretAccessKeySecretId`），从不保存密钥值。Access key ID 仍为普通设置项。
+- **Secret access key** 通过 Obsidian **密钥存储**保存（需 Obsidian 1.13.0+）。本插件只在 `data.json` 中保存密钥名称（`secretAccessKeySecretId`），从不保存密钥值。Access key ID 仍为普通设置项。
 - 同步 `.obsidian/` 可能暴露其他插件密钥。本插件硬排除自身 `data.json` / 插件目录。默认可编辑排除：`**/workspace*`、`.trash/**`。
 
 ## 安装与设置
 
-1. 安装并启用插件（**设置 → 社区插件**，Obsidian 1.11.4+）。
+1. 安装并启用插件（**设置 → 社区插件**，Obsidian 1.13.0+）。
 2. 打开 **设置 → Easy Cloud Sync**，配置服务商、存储桶、Access key ID、Secret access key（密钥存储）与前缀。
 3. 使用 **测试连接**，然后打开 **Easy Cloud Sync** 侧边栏（功能区或命令），选择 **立即同步**。
 

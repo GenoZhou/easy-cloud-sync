@@ -21,12 +21,12 @@ Obsidian community plugin that syncs your vault to **AWS S3**, **Cloudflare R2**
 
 - **No client-side encryption** in v1 — objects are stored as-is. Anyone with your bucket credentials can read vault contents.
 - Network requests go only to your configured S3-compatible endpoint. No telemetry.
-- The **secret access key** is stored via Obsidian **Secret storage** (requires Obsidian 1.11.4+). This plugin persists only the secret name (`secretAccessKeySecretId`) in `data.json` — never the key value. The access key ID remains a normal settings field.
+- The **secret access key** is stored via Obsidian **Secret storage** (requires Obsidian 1.13.0+). This plugin persists only the secret name (`secretAccessKeySecretId`) in `data.json` — never the key value. The access key ID remains a normal settings field.
 - Syncing `.obsidian/` can expose other plugins’ secrets. This plugin hard-excludes its own `data.json` / plugin directory. Default editable excludes: `**/workspace*`, `.trash/**`.
 
 ## Setup
 
-1. Install the plugin and enable it in **Settings → Community plugins** (Obsidian 1.11.4+).
+1. Install the plugin and enable it in **Settings → Community plugins** (Obsidian 1.13.0+).
 2. Open **Settings → Easy Cloud Sync** and configure provider, bucket, access key ID, and secret access key (via secret storage), plus prefixes.
 3. Use **Test connection**, then open the **Easy Cloud Sync** sidebar (ribbon or command) and select **Sync now**.
 

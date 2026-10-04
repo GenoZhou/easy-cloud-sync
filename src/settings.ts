@@ -1,9 +1,17 @@
 /**
  * Settings tab — connection, prefixes, excludes, interval, authority reset.
  * No sync/backup enable toggles; no retention knobs.
+ *
+ * Declarative settings API (Obsidian 1.13+): `getSettingDefinitions()`.
  */
 
-import { App, Notice, PluginSettingTab, SecretComponent, Setting } from 'obsidian';
+import {
+	App,
+	Notice,
+	PluginSettingTab,
+	SecretComponent,
+	SettingDefinitionItem,
+} from 'obsidian';
 import type EasySyncPlugin from './main';
 import {
 	EasySyncSettings,
@@ -24,6 +32,8 @@ export { DEFAULT_SETTINGS } from './types';
 
 const SYNC_INTERVALS: SyncIntervalMinutes[] = [0, 1, 2, 5, 10, 15, 30];
 
+type SettingsKey = keyof EasySyncSettings;
+
 export class EasySyncSettingTab extends PluginSettingTab {
 	plugin: EasySyncPlugin;
 
@@ -32,221 +42,275 @@ export class EasySyncSettingTab extends PluginSettingTab {
 		this.plugin = plugin;
 	}
 
-	display(): void {
-		const { containerEl } = this;
-		containerEl.empty();
-		containerEl.addClass('easy-sync-settings');
-
-		this.renderDisclosure(containerEl);
-		this.renderConnectionSection(containerEl);
-		this.renderSyncSection(containerEl);
-		this.renderAdvancedSection(containerEl);
-	}
-
-	private renderDisclosure(containerEl: HTMLElement): void {
+	getSettingDefinitions(): SettingDefinitionItem[] {
 		const s = t().settings;
-		new Setting(containerEl).setName(s.privacyHeading).setHeading();
 		const configDir = this.app.vault.configDir;
-		containerEl.createEl('p', {
-			cls: 'setting-item-description',
-			text: s.privacyBody(configDir),
-		});
-	}
+		const provider = this.plugin.settings.provider;
 
-	private renderConnectionSection(containerEl: HTMLElement): void {
-		const s = t().settings;
-		new Setting(containerEl).setName(s.connectionHeading).setHeading();
-
-		new Setting(containerEl)
-			.setName(s.provider)
-			.setDesc(s.providerDesc)
-			.addDropdown((dropdown) => {
-				for (const [value, name] of Object.entries(S3_PROVIDER_NAMES)) {
-					dropdown.addOption(value, name);
-				}
-				dropdown.setValue(this.plugin.settings.provider);
-				dropdown.onChange(async (value) => {
-					this.plugin.settings.provider = value as S3ProviderType;
-					await this.plugin.saveSettings();
-					this.display();
-				});
-			});
-
-		if (this.plugin.settings.provider !== 'aws') {
-			new Setting(containerEl)
-				.setName(s.endpoint)
-				.setDesc(
-					this.plugin.settings.provider === 'r2' ? s.endpointR2 : s.endpointCustom,
-				)
-				.addText((text) => {
-					text.setPlaceholder('https://example.com');
-					text.setValue(this.plugin.settings.endpoint);
-					text.onChange(async (value) => {
-						this.plugin.settings.endpoint = value.trim();
-						await this.plugin.saveSettings();
-					});
-				});
+		const intervalOptions: Record<string, string> = {};
+		for (const minutes of SYNC_INTERVALS) {
+			intervalOptions[String(minutes)] =
+				minutes === 0 ? s.intervalOff : s.intervalMinutes(minutes);
 		}
 
-		new Setting(containerEl)
-			.setName(s.region)
-			.setDesc(this.plugin.settings.provider === 'r2' ? s.regionR2 : s.regionAws)
-			.addText((text) => {
-				text.setPlaceholder(this.plugin.settings.provider === 'r2' ? 'auto' : 'us-east-1');
-				text.setValue(this.plugin.settings.region);
-				text.onChange(async (value) => {
-					this.plugin.settings.region = value.trim();
-					await this.plugin.saveSettings();
-				});
-			});
+		return [
+			{
+				type: 'group',
+				heading: s.privacyHeading,
+				items: [
+					{
+						name: s.privacyHeading,
+						desc: s.privacyBody(configDir),
+						aliases: ['privacy', 'encryption', 'secret storage'],
+					},
+				],
+			},
+			{
+				type: 'group',
+				heading: s.connectionHeading,
+				cls: 'easy-sync-settings',
+				items: [
+					{
+						name: s.provider,
+						desc: s.providerDesc,
+						control: {
+							type: 'dropdown',
+							key: 'provider',
+							options: { ...S3_PROVIDER_NAMES },
+						},
+					},
+					{
+						name: s.endpoint,
+						desc: provider === 'r2' ? s.endpointR2 : s.endpointCustom,
+						visible: () => this.plugin.settings.provider !== 'aws',
+						control: {
+							type: 'text',
+							key: 'endpoint',
+							placeholder: 'https://example.com',
+						},
+					},
+					{
+						name: s.region,
+						desc: provider === 'r2' ? s.regionR2 : s.regionAws,
+						control: {
+							type: 'text',
+							key: 'region',
+							placeholder: provider === 'r2' ? 'auto' : 'us-east-1',
+						},
+					},
+					{
+						name: s.bucket,
+						desc: s.bucketDesc,
+						control: {
+							type: 'text',
+							key: 'bucket',
+							placeholder: s.bucketPlaceholder,
+						},
+					},
+					{
+						name: s.accessKeyId,
+						desc: s.accessKeyIdDesc,
+						render: (setting) => {
+							setting.addText((text) => {
+								text.setPlaceholder(s.accessKeyPlaceholder);
+								text.setValue(this.plugin.settings.accessKeyId);
+								text.inputEl.type = 'password';
+								text.onChange(async (value) => {
+									this.plugin.settings.accessKeyId = value;
+									await this.plugin.saveSettings();
+								});
+							});
+						},
+					},
+					{
+						name: s.secretAccessKey,
+						desc: s.secretAccessKeyDesc,
+						render: (setting) => {
+							setting.addComponent((container) => {
+								return new SecretComponent(this.app, container)
+									.setValue(this.plugin.settings.secretAccessKeySecretId)
+									.onChange(async (value) => {
+										this.plugin.settings.secretAccessKeySecretId = value;
+										await this.plugin.saveSettings();
+									});
+							});
+						},
+					},
+					{
+						name: s.forcePathStyle,
+						desc: s.forcePathStyleDesc,
+						visible: () => this.plugin.settings.provider === 'custom',
+						control: {
+							type: 'toggle',
+							key: 'forcePathStyle',
+						},
+					},
+					{
+						name: s.testConnection,
+						desc: isConnectionConfigured(this.app, this.plugin.settings)
+							? s.testConnectionReady
+							: s.testConnectionIncomplete,
+						render: (setting) => {
+							setting.addButton((btn) => {
+								btn.setButtonText(s.testConnection).onClick(async () => {
+									btn.setDisabled(true);
+									try {
+										await this.runTestConnection();
+									} finally {
+										btn.setDisabled(false);
+									}
+								});
+							});
+						},
+					},
+				],
+			},
+			{
+				type: 'group',
+				heading: s.syncHeading,
+				items: [
+					{
+						name: s.syncPrefix,
+						desc: s.syncPrefixDesc,
+						control: {
+							type: 'text',
+							key: 'syncPrefix',
+						},
+					},
+					{
+						name: s.backupPrefix,
+						desc: s.backupPrefixDesc,
+						control: {
+							type: 'text',
+							key: 'backupPrefix',
+						},
+					},
+					{
+						name: s.bucketLayoutHeading,
+						desc: s.bucketLayoutDesc,
+						searchable: false,
+						render: (setting) => {
+							setting.settingEl.addClass('easy-sync-bucket-layout');
+							setting.controlEl.createEl('pre', {
+								cls: 'easy-sync-bucket-tree',
+								text: this.bucketLayoutText(),
+							});
+						},
+					},
+					{
+						name: s.syncInterval,
+						desc: s.syncIntervalDesc,
+						control: {
+							type: 'dropdown',
+							key: 'syncIntervalMinutes',
+							options: intervalOptions,
+						},
+					},
+				],
+			},
+			{
+				type: 'group',
+				heading: s.advancedHeading,
+				items: [
+					{
+						name: s.excludePatterns,
+						desc: s.excludePatternsDesc,
+						render: (setting) => {
+							setting.addTextArea((area) => {
+								area.setValue(this.plugin.settings.excludePatterns.join('\n'));
+								area.inputEl.rows = 4;
+								area.inputEl.addClass('easy-sync-exclude-patterns');
+								area.onChange(async (value) => {
+									this.plugin.settings.excludePatterns = value
+										.split('\n')
+										.map((line) => line.trim())
+										.filter((line) => line.length > 0);
+									await this.plugin.saveSettings();
+								});
+							});
+						},
+					},
+					{
+						name: s.resetLocalName,
+						desc: s.resetLocalDesc,
+						render: (setting) => {
+							setting.addButton((btn) => {
+								btn.setButtonText(s.resetLocalButton)
+									.setDestructive()
+									.onClick(() => {
+										void this.confirmAuthorityReset('cloud');
+									});
+							});
+						},
+					},
+					{
+						name: s.resetCloudName,
+						desc: s.resetCloudDesc,
+						render: (setting) => {
+							setting.addButton((btn) => {
+								btn.setButtonText(s.resetCloudButton)
+									.setDestructive()
+									.onClick(() => {
+										void this.confirmAuthorityReset('local');
+									});
+							});
+						},
+					},
+				],
+			},
+		];
+	}
 
-		new Setting(containerEl)
-			.setName(s.bucket)
-			.setDesc(s.bucketDesc)
-			.addText((text) => {
-				text.setPlaceholder(s.bucketPlaceholder);
-				text.setValue(this.plugin.settings.bucket);
-				text.onChange(async (value) => {
-					this.plugin.settings.bucket = value.trim();
-					await this.plugin.saveSettings();
-					this.updateBucketLayoutPreview();
-				});
-			});
+	getControlValue(key: string): unknown {
+		if (key === 'excludePatterns') {
+			return this.plugin.settings.excludePatterns.join('\n');
+		}
+		if (key === 'syncIntervalMinutes') {
+			return String(this.plugin.settings.syncIntervalMinutes);
+		}
+		return this.plugin.settings[key as SettingsKey];
+	}
 
-		new Setting(containerEl)
-			.setName(s.accessKeyId)
-			.setDesc(s.accessKeyIdDesc)
-			.addText((text) => {
-				text.setPlaceholder(s.accessKeyPlaceholder);
-				text.setValue(this.plugin.settings.accessKeyId);
-				text.inputEl.type = 'password';
-				text.onChange(async (value) => {
-					this.plugin.settings.accessKeyId = value;
-					await this.plugin.saveSettings();
-				});
-			});
+	async setControlValue(key: string, value: unknown): Promise<void> {
+		const settings = this.plugin.settings;
 
-		new Setting(containerEl)
-			.setName(s.secretAccessKey)
-			.setDesc(s.secretAccessKeyDesc)
-			.addComponent((container) => {
-				return new SecretComponent(this.app, container)
-					.setValue(this.plugin.settings.secretAccessKeySecretId)
-					.onChange(async (value) => {
-						this.plugin.settings.secretAccessKeySecretId = value;
-						await this.plugin.saveSettings();
-					});
-			});
-
-		if (this.plugin.settings.provider === 'custom') {
-			new Setting(containerEl)
-				.setName(s.forcePathStyle)
-				.setDesc(s.forcePathStyleDesc)
-				.addToggle((toggle) => {
-					toggle.setValue(this.plugin.settings.forcePathStyle);
-					toggle.onChange(async (value) => {
-						this.plugin.settings.forcePathStyle = value;
-						await this.plugin.saveSettings();
-					});
-				});
+		if (key === 'excludePatterns') {
+			settings.excludePatterns = String(value)
+				.split('\n')
+				.map((line) => line.trim())
+				.filter((line) => line.length > 0);
+		} else if (key === 'syncIntervalMinutes') {
+			settings.syncIntervalMinutes = Number(value) as SyncIntervalMinutes;
+		} else if (key === 'syncPrefix' || key === 'backupPrefix') {
+			settings[key] = normalizePrefix(String(value));
+		} else if (
+			key === 'endpoint' ||
+			key === 'region' ||
+			key === 'bucket' ||
+			key === 'accessKeyId'
+		) {
+			settings[key] = typeof value === 'string' ? value.trim() : '';
+		} else if (key === 'provider') {
+			settings.provider = value as S3ProviderType;
+		} else if (key === 'forcePathStyle') {
+			settings.forcePathStyle = Boolean(value);
+		} else if (key in settings) {
+			(settings as unknown as Record<string, unknown>)[key] = value;
 		}
 
-		new Setting(containerEl)
-			.setName(s.testConnection)
-			.setDesc(
-				isConnectionConfigured(this.app, this.plugin.settings)
-					? s.testConnectionReady
-					: s.testConnectionIncomplete,
-			)
-			.addButton((btn) => {
-				btn.setButtonText(s.testConnection).onClick(async () => {
-					btn.setDisabled(true);
-					try {
-						const provider = new S3Provider(this.plugin.settings, this.app);
-						const message = await provider.testConnection();
-						// Fresh HeadBucket succeeded with offset 0. Rebuild the shared
-						// client when idle; during sync only clear a poisoned offset.
-						const shared = this.plugin.getS3Provider();
-						if (this.plugin.isSyncInProgress()) {
-							shared?.resetSystemClockOffset();
-						} else {
-							shared?.destroy();
-						}
-						new Notice(message);
-					} catch (error) {
-						const message =
-							error instanceof Error ? error.message : s.connectionFailed;
-						new Notice(message);
-					} finally {
-						btn.setDisabled(false);
-					}
-				});
-			});
-	}
+		await this.plugin.saveSettings();
 
-	private renderSyncSection(containerEl: HTMLElement): void {
-		const s = t().settings;
-		new Setting(containerEl).setName(s.syncHeading).setHeading();
+		if (
+			key === 'provider' ||
+			key === 'bucket' ||
+			key === 'syncPrefix' ||
+			key === 'backupPrefix'
+		) {
+			this.update();
+			return;
+		}
 
-		new Setting(containerEl)
-			.setName(s.syncPrefix)
-			.setDesc(s.syncPrefixDesc)
-			.addText((text) => {
-				text.setValue(this.plugin.settings.syncPrefix);
-				text.onChange(async (value) => {
-					this.plugin.settings.syncPrefix = normalizePrefix(value);
-					await this.plugin.saveSettings();
-					this.updateBucketLayoutPreview();
-				});
-			});
-
-		new Setting(containerEl)
-			.setName(s.backupPrefix)
-			.setDesc(s.backupPrefixDesc)
-			.addText((text) => {
-				text.setValue(this.plugin.settings.backupPrefix);
-				text.onChange(async (value) => {
-					this.plugin.settings.backupPrefix = normalizePrefix(value);
-					await this.plugin.saveSettings();
-					this.updateBucketLayoutPreview();
-				});
-			});
-
-		this.renderBucketLayoutPreview(containerEl);
-
-		new Setting(containerEl)
-			.setName(s.syncInterval)
-			.setDesc(s.syncIntervalDesc)
-			.addDropdown((dropdown) => {
-				for (const minutes of SYNC_INTERVALS) {
-					dropdown.addOption(
-						String(minutes),
-						minutes === 0 ? s.intervalOff : s.intervalMinutes(minutes),
-					);
-				}
-				dropdown.setValue(String(this.plugin.settings.syncIntervalMinutes));
-				dropdown.onChange(async (value) => {
-					this.plugin.settings.syncIntervalMinutes = Number(value) as SyncIntervalMinutes;
-					await this.plugin.saveSettings();
-				});
-			});
-	}
-
-	private renderBucketLayoutPreview(containerEl: HTMLElement): void {
-		const s = t().settings;
-		const wrap = containerEl.createDiv({ cls: 'easy-sync-bucket-layout' });
-		wrap.createDiv({
-			cls: 'setting-item-name',
-			text: s.bucketLayoutHeading,
-		});
-		wrap.createEl('p', {
-			cls: 'setting-item-description',
-			text: s.bucketLayoutDesc,
-		});
-		wrap.createEl('pre', {
-			cls: 'easy-sync-bucket-tree',
-			text: this.bucketLayoutText(),
-		});
+		this.updateBucketLayoutPreview();
 	}
 
 	private updateBucketLayoutPreview(): void {
@@ -269,47 +333,24 @@ export class EasySyncSettingTab extends PluginSettingTab {
 		);
 	}
 
-	private renderAdvancedSection(containerEl: HTMLElement): void {
+	private async runTestConnection(): Promise<void> {
 		const s = t().settings;
-		new Setting(containerEl).setName(s.advancedHeading).setHeading();
-
-		new Setting(containerEl)
-			.setName(s.excludePatterns)
-			.setDesc(s.excludePatternsDesc)
-			.addTextArea((area) => {
-				area.setValue(this.plugin.settings.excludePatterns.join('\n'));
-				area.inputEl.rows = 4;
-				area.inputEl.addClass('easy-sync-exclude-patterns');
-				area.onChange(async (value) => {
-					this.plugin.settings.excludePatterns = value
-						.split('\n')
-						.map((line) => line.trim())
-						.filter((line) => line.length > 0);
-					await this.plugin.saveSettings();
-				});
-			});
-
-		new Setting(containerEl)
-			.setName(s.resetLocalName)
-			.setDesc(s.resetLocalDesc)
-			.addButton((btn) => {
-				btn.setButtonText(s.resetLocalButton)
-					.setWarning()
-					.onClick(() => {
-						void this.confirmAuthorityReset('cloud');
-					});
-			});
-
-		new Setting(containerEl)
-			.setName(s.resetCloudName)
-			.setDesc(s.resetCloudDesc)
-			.addButton((btn) => {
-				btn.setButtonText(s.resetCloudButton)
-					.setWarning()
-					.onClick(() => {
-						void this.confirmAuthorityReset('local');
-					});
-			});
+		try {
+			const provider = new S3Provider(this.plugin.settings, this.app);
+			const message = await provider.testConnection();
+			// Fresh HeadBucket succeeded with offset 0. Rebuild the shared
+			// client when idle; during sync only clear a poisoned offset.
+			const shared = this.plugin.getS3Provider();
+			if (this.plugin.isSyncInProgress()) {
+				shared?.resetSystemClockOffset();
+			} else {
+				shared?.destroy();
+			}
+			new Notice(message);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : s.connectionFailed;
+			new Notice(message);
+		}
 	}
 
 	private async confirmAuthorityReset(authority: ResetAuthority): Promise<void> {
