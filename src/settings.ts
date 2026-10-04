@@ -164,6 +164,9 @@ export class EasySyncSettingTab extends PluginSettingTab {
 					try {
 						const provider = new S3Provider(this.plugin.settings, this.app);
 						const message = await provider.testConnection();
+						// Rebuild the plugin's long-lived client so a prior poisoned
+						// systemClockOffset cannot keep failing sync after a good test.
+						this.plugin.getS3Provider()?.updateSettings(this.plugin.settings);
 						new Notice(message);
 					} catch (error) {
 						const message =

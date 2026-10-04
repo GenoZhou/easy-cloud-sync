@@ -32,6 +32,7 @@
 import { requestUrl, RequestUrlParam } from 'obsidian';
 import { HttpRequest, HttpResponse } from '@smithy/protocol-http';
 import { HttpHandlerOptions } from '@smithy/types';
+import { filterResponseHeadersForAwsSdk } from './clockSkew';
 
 /**
  * AWS SDK v3 `HttpHandler` implementation that routes all S3 requests through
@@ -134,13 +135,19 @@ export class ObsidianHttpHandler {
 
             console.debug(`[S3 HTTP] Response: ${obsidianResponse.status}`);
 
-            // Convert response headers
-            const responseHeaders: Record<string, string> = {};
+            // Normalize header names, then drop Date/Age on successes so a
+            // stale Obsidian/proxy Date cannot poison AWS systemClockOffset.
+            // Error responses keep Date so skew recovery still works.
+            const rawHeaders: Record<string, string> = {};
             if (obsidianResponse.headers) {
                 for (const [key, value] of Object.entries(obsidianResponse.headers)) {
-                    responseHeaders[key.toLowerCase()] = value;
+                    rawHeaders[key.toLowerCase()] = value;
                 }
             }
+            const responseHeaders = filterResponseHeadersForAwsSdk(
+                rawHeaders,
+                obsidianResponse.status,
+            );
 
 			const responseBody = this.createResponseBody(obsidianResponse.arrayBuffer);
 

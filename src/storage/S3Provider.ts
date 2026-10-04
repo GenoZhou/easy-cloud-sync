@@ -49,6 +49,7 @@ import {
 	resolveSecretAccessKey,
 	validateConnectionSettings,
 } from './S3Config';
+import { installClockSkewRetryMiddleware } from './clockSkew';
 
 /**
  * S3Provider class
@@ -129,6 +130,8 @@ export class S3Provider {
             }
             const config = buildS3ClientConfig(this.settings, secretAccessKey);
             this.client = new S3Client(config);
+            // Guard parallel sync uploads/downloads against missed SDK skew retries.
+            installClockSkewRetryMiddleware(this.client);
         }
         return this.client;
     }
