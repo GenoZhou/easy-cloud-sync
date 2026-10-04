@@ -99,13 +99,6 @@
 	border-radius: 6px;
 }
 
-.easy-sync-btn-row {
-	display: grid;
-	grid-template-columns: 1fr 1fr;
-	gap: 8px;
-	margin: 8px 0;
-}
-
 .easy-sync-backup-list,
 .easy-sync-conflict-list {
 	list-style: none;
@@ -286,8 +279,3 @@
 	color: var(--text-muted);
 }
 
-@media (max-width: 360px) {
-	.easy-sync-btn-row {
-		grid-template-columns: 1fr;
-	}
-}
