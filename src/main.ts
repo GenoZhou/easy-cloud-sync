@@ -452,6 +452,11 @@ export default class EasySyncPlugin extends Plugin {
 		return this.s3Provider;
 	}
 
+	/** Whether a sync cycle is currently executing (for settings / UI guards). */
+	isSyncInProgress(): boolean {
+		return this.syncEngine?.isInProgress() ?? false;
+	}
+
 	getPathCodec(): SyncPathCodec | null {
 		return this.pathCodec;
 	}

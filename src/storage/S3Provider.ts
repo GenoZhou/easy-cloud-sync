@@ -113,7 +113,27 @@ export class S3Provider {
      */
     updateSettings(settings: EasySyncSettings): void {
         this.settings = settings;
-        this.client = null; // Force client recreation on next use
+        this.invalidateClient();
+    }
+
+    /**
+     * Drop the cached `S3Client` so the next operation rebuilds it.
+     * Safe when no in-flight sync holds the old instance for new calls;
+     * prefer {@link resetSystemClockOffset} if a sync may be running.
+     */
+    invalidateClient(): void {
+        this.destroy();
+    }
+
+    /**
+     * Clear a poisoned `systemClockOffset` without destroying the client.
+     * Safe to call during an in-flight sync (in-progress requests keep their
+     * already-signed headers; subsequent signs use offset 0).
+     */
+    resetSystemClockOffset(): void {
+        if (this.client) {
+            this.client.config.systemClockOffset = 0;
+        }
     }
 
     /**
