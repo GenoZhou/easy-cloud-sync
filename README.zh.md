@@ -54,6 +54,6 @@ npm test       # 单元测试（node:test + tsx）
 
 ## 致谢
 
-同步引擎、S3 `requestUrl` HTTP 处理、日志/规划/执行与备份快照布局选择性改编自 [sathinduga/obsidian-s3-sync-and-backup](https://github.com/sathinduga/obsidian-s3-sync-and-backup)（MIT）。详见文件头与 `LICENSE`。
+同步引擎、S3 `requestUrl` HTTP 处理、日志/规划/执行与备份快照布局选择性改编自 [sathinduga/obsidian-s3-sync-and-backup](https://github.com/sathinduga/obsidian-s3-sync-and-backup)（MIT）。详见文件头、`LICENSE` 与 `NOTICE`。
 
 未移植：状态栏 UI、客户端加密、定时备份、保留策略设置 UI、同步/备份开关、B2/RustFS 预设、`LOCAL_`/`REMOTE_` 冲突产物。

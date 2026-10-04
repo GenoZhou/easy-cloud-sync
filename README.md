@@ -54,6 +54,6 @@ Copy `main.js`, `manifest.json`, and `styles.css` into `<Vault>/.obsidian/plugin
 
 ## Attribution
 
-Sync engine, S3 `requestUrl` HTTP handler, journal/planner/executor, and backup snapshot layout are selectively adapted from [sathinduga/obsidian-s3-sync-and-backup](https://github.com/sathinduga/obsidian-s3-sync-and-backup) (MIT). See file headers and `LICENSE`.
+Sync engine, S3 `requestUrl` HTTP handler, journal/planner/executor, and backup snapshot layout are selectively adapted from [sathinduga/obsidian-s3-sync-and-backup](https://github.com/sathinduga/obsidian-s3-sync-and-backup) (MIT). See file headers, `LICENSE`, and `NOTICE`.
 
 Not ported: status bar UI, client encryption, scheduled backups, retention settings UI, sync/backup enable toggles, B2/RustFS presets, `LOCAL_`/`REMOTE_` conflict artifacts.
