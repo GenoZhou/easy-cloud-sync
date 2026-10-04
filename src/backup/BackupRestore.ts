@@ -9,6 +9,7 @@ import { App, Notice, TFile } from 'obsidian';
 import { BackupDownloader } from './BackupDownloader';
 import { getVaultFileKind, toArrayBuffer } from '../utils/vaultFiles';
 import { ConfirmModal } from '../ui/ConfirmModal';
+import { t } from '../i18n';
 
 export class BackupRestore {
 	constructor(
@@ -75,24 +76,22 @@ export async function restoreBackupWithConfirm(
 	downloader: BackupDownloader,
 	backupName: string,
 ): Promise<void> {
+	const b = t().backup;
 	const ok = await new ConfirmModal(
 		app,
-		'Restore backup',
-		`Restore “${backupName}”? Files present in this snapshot will overwrite ` +
-			'the same paths in your vault. Other vault files are left untouched.',
-		'Restore',
+		b.restoreTitle,
+		b.restoreBody(backupName),
+		b.restoreConfirm,
 		'mod-cta',
 	).openAndWait();
 	if (!ok) return;
 
-	new Notice('Restoring backup…');
+	new Notice(b.restoring);
 	const restorer = new BackupRestore(app, downloader);
 	const result = await restorer.restore(backupName);
 	if (result.errors.length > 0) {
-		new Notice(
-			`Restore finished with errors: ${result.restored} restored, ${result.errors.length} failed`,
-		);
+		new Notice(b.restoreErrors(result.restored, result.errors.length));
 	} else {
-		new Notice(`Restore completed: ${result.restored} files`);
+		new Notice(b.restoreDone(result.restored));
 	}
 }

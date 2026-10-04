@@ -75,21 +75,20 @@ export const en = {
 		configurePrompt: 'Configure your S3 connection in settings to start syncing.',
 		openSettings: 'Open settings',
 		syncNow: 'Sync now',
-		noConflicts: 'No unresolved conflicts',
 		conflictOne: '1 conflict',
 		conflictsMany: (n: number) => `${n} conflicts`,
 		showDiff: 'Show diff',
 		backupNow: 'Backup now',
-		download: 'Download',
 		restore: 'Restore',
 		statusSyncing: 'Syncing…',
 		statusSynced: 'Synced',
 		statusConflicts: 'Conflicts',
 		statusError: 'Error',
 		statusIdle: 'Idle',
+		loadingBackups: 'Loading backups…',
 		noBackupsYet: 'No backups yet (keeps the last 5)',
-		downloadStarted: 'Download started',
-		downloadFailed: 'Download failed',
+		backupMeta: (when: string, count: number) =>
+			`${when} · ${count} ${count === 1 ? 'file' : 'files'}`,
 		backupNotReady: 'Backup system not ready',
 		statLine: (
 			up: number,
@@ -98,6 +97,17 @@ export const en = {
 			conflicts: number,
 			skipped: number,
 		) => `↑${up} ↓${down} ×${del} · ${conflicts} conflicts · ${skipped} skipped`,
+	},
+	backup: {
+		restoreTitle: 'Restore backup',
+		restoreBody: (name: string) =>
+			`Restore “${name}”? Files present in this snapshot will overwrite ` +
+			'the same paths in your vault. Other vault files are left untouched.',
+		restoreConfirm: 'Restore',
+		restoring: 'Restoring backup…',
+		restoreDone: (n: number) => `Restore completed: ${n} files`,
+		restoreErrors: (restored: number, failed: number) =>
+			`Restore finished with errors: ${restored} restored, ${failed} failed`,
 	},
 	conflict: {
 		emptyHint: 'Select a conflict in the Easy Sync sidebar, then choose Show diff.',

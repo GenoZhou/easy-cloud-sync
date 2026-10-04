@@ -18,6 +18,7 @@ export class EasySyncSidebarView extends ItemView {
 	plugin: EasySyncPlugin;
 	private conflicts: ConflictRecord[] = [];
 	private backups: BackupInfo[] = [];
+	private backupsLoading = false;
 
 	constructor(leaf: WorkspaceLeaf, plugin: EasySyncPlugin) {
 		super(leaf);
@@ -45,17 +46,25 @@ export class EasySyncSidebarView extends ItemView {
 	}
 
 	async refresh(): Promise<void> {
-		if (isConnectionConfigured(this.app, this.plugin.settings)) {
-			this.conflicts = (await this.plugin.getSyncJournal()?.getAllConflicts()) ?? [];
-			try {
-				this.backups = (await this.plugin.getRetentionManager()?.listBackups()) ?? [];
-				this.backups = this.backups.slice(0, 5);
-			} catch {
-				this.backups = [];
-			}
-		} else {
+		if (!isConnectionConfigured(this.app, this.plugin.settings)) {
 			this.conflicts = [];
 			this.backups = [];
+			this.backupsLoading = false;
+			this.render();
+			return;
+		}
+
+		this.conflicts = (await this.plugin.getSyncJournal()?.getAllConflicts()) ?? [];
+		this.backupsLoading = true;
+		this.render();
+
+		try {
+			this.backups = (await this.plugin.getRetentionManager()?.listBackups()) ?? [];
+			this.backups = this.backups.slice(0, 5);
+		} catch {
+			this.backups = [];
+		} finally {
+			this.backupsLoading = false;
 		}
 		this.render();
 	}
@@ -140,16 +149,12 @@ export class EasySyncSidebarView extends ItemView {
 	}
 
 	private renderConflicts(container: HTMLElement): void {
-		const section = container.createDiv({ cls: 'easy-sync-section' });
-		const s = t().sidebar;
-
 		if (this.conflicts.length === 0) {
-			section.createEl('p', {
-				cls: 'easy-sync-muted',
-				text: s.noConflicts,
-			});
 			return;
 		}
+
+		const section = container.createDiv({ cls: 'easy-sync-section' });
+		const s = t().sidebar;
 
 		section.createEl('p', {
 			cls: 'easy-sync-muted',
@@ -190,6 +195,14 @@ export class EasySyncSidebarView extends ItemView {
 			void this.plugin.triggerManualBackup().then(() => this.refresh());
 		});
 
+		if (this.backupsLoading) {
+			section.createEl('p', {
+				cls: 'easy-sync-muted',
+				text: s.loadingBackups,
+			});
+			return;
+		}
+
 		if (this.backups.length === 0) {
 			section.createEl('p', {
 				cls: 'easy-sync-muted',
@@ -201,31 +214,17 @@ export class EasySyncSidebarView extends ItemView {
 		const list = section.createEl('ul', { cls: 'easy-sync-backup-list' });
 		for (const backup of this.backups) {
 			const item = list.createEl('li', { cls: 'easy-sync-backup-item' });
-			item.createDiv({
+			const row = item.createDiv({ cls: 'easy-sync-backup-row' });
+			row.createDiv({
 				cls: 'easy-sync-backup-meta',
-				text: `${new Date(backup.timestamp).toLocaleString()} · ${backup.fileCount} files`,
+				text: s.backupMeta(
+					new Date(backup.timestamp).toLocaleString(),
+					backup.fileCount,
+				),
 			});
-			const row = item.createDiv({ cls: 'easy-sync-btn-row' });
-
-			const downloadBtn = row.createEl('button', {
-				text: s.download,
-				cls: 'easy-sync-btn easy-sync-btn-secondary',
-			});
-			downloadBtn.addEventListener('click', () => {
-				void this.plugin
-					.getBackupDownloader()
-					?.triggerDownload(backup.name)
-					.then(() => new Notice(s.downloadStarted))
-					.catch((error: unknown) => {
-						const message =
-							error instanceof Error ? error.message : s.downloadFailed;
-						new Notice(message);
-					});
-			});
-
 			const restoreBtn = row.createEl('button', {
 				text: s.restore,
-				cls: 'easy-sync-btn easy-sync-btn-secondary',
+				cls: 'easy-sync-btn easy-sync-btn-ghost easy-sync-btn-inline',
 			});
 			restoreBtn.addEventListener('click', () => {
 				const downloader = this.plugin.getBackupDownloader();
