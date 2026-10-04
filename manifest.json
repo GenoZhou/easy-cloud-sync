@@ -1,7 +1,7 @@
 {
 	"id": "easy-sync",
 	"name": "Easy Sync",
-	"version": "1.0.1-beta.5",
+	"version": "1.0.1-beta.6",
 	"minAppVersion": "1.11.4",
 	"description": "Sync your vault to AWS S3, Cloudflare R2, or any S3-compatible storage, with manual snapshot backups and clear conflict resolution.",
 	"author": "GenoZhou",
