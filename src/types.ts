@@ -21,7 +21,8 @@ export const S3_PROVIDER_NAMES: Record<S3ProviderType, string> = {
 // Settings Types
 // =============================================================================
 
-export type SyncIntervalMinutes = 1 | 2 | 5 | 10 | 15 | 30;
+/** 0 = manual only (no startup / interval sync). */
+export type SyncIntervalMinutes = 0 | 1 | 2 | 5 | 10 | 15 | 30;
 
 /** Fixed backup retention: keep newest 5 snapshots. */
 export const BACKUP_RETAIN_COPIES = 5;
@@ -142,6 +143,9 @@ export interface SyncError {
 export type LocalClassification = 'L0' | 'L+' | 'L=' | 'LΔ';
 export type RemoteClassification = 'R0' | 'R+' | 'R=' | 'RΔ';
 
+/** One-shot Advanced reset: prefer device or cloud instead of conflict. */
+export type ResetAuthority = 'local' | 'cloud';
+
 export interface DecisionInput {
 	path: string;
 	local: LocalClassification;
@@ -154,6 +158,8 @@ export interface DecisionInput {
 	hasBaseline: boolean;
 	localFingerprint?: string;
 	remoteFingerprint?: string;
+	/** When set, resolve differences toward this side (no conflicts). */
+	authority?: ResetAuthority;
 }
 
 /** Easy Sync writes plaintext only; xsalsa tag may appear on objects from other tools. */

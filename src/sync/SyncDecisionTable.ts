@@ -44,6 +44,10 @@ import {
  *   human-readable reason why.
  */
 export function decide(input: DecisionInput): SyncPlanItem {
+	if (input.authority === 'local' || input.authority === 'cloud') {
+		return decideWithAuthority(input);
+	}
+
 	if (input.hasUnresolvedConflict) {
 		return decideConflictMode(input);
 	}
@@ -59,6 +63,38 @@ export function decide(input: DecisionInput): SyncPlanItem {
 	}
 
 	return decideWithBaseline(input);
+}
+
+/**
+ * Advanced reset: force one side to win for every path.
+ * - local → upload device copy / delete cloud-only
+ * - cloud → download cloud copy / delete device-only
+ */
+function decideWithAuthority(input: DecisionInput): SyncPlanItem {
+	const { path } = input;
+	const preferLocal = input.authority === 'local';
+
+	if (!input.localExists && !input.remoteExists) {
+		return input.hasBaseline
+			? plan(path, 'forget', 'Authority reset — both sides absent')
+			: plan(path, 'skip', 'Authority reset — nothing to align');
+	}
+
+	if (input.localExists && input.remoteExists && fingerprintsMatch(input)) {
+		return plan(path, 'adopt', 'Authority reset — content identical');
+	}
+
+	if (preferLocal) {
+		if (input.localExists) {
+			return plan(path, 'upload', 'Authority reset — keep device copy');
+		}
+		return plan(path, 'delete-remote', 'Authority reset — remove cloud-only copy');
+	}
+
+	if (input.remoteExists) {
+		return plan(path, 'download', 'Authority reset — keep cloud copy');
+	}
+	return plan(path, 'delete-local', 'Authority reset — remove device-only copy');
 }
 
 /**

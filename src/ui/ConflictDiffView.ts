@@ -14,6 +14,7 @@ import {
 import { ConflictResolution } from './ConflictResolver';
 import { closeConflictDiffToSidebar } from './closeConflictDiff';
 import { collapseContextRuns } from '../utils/textDiff';
+import { t } from '../i18n';
 
 export const EASY_SYNC_DIFF_VIEW_TYPE = 'easy-sync-conflict-diff';
 
@@ -35,7 +36,7 @@ export class ConflictDiffView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return this.path ? `Diff · ${this.path}` : 'Conflict diff';
+		return this.path ? t().conflict.viewTitlePath(this.path) : t().conflict.viewTitle;
 	}
 
 	getIcon(): string {
@@ -163,10 +164,11 @@ export class ConflictDiffView extends ItemView {
 		contentEl.addClass('easy-sync-diff-page');
 
 		const path = this.path;
+		const c = t().conflict;
 		if (!path) {
 			contentEl.createEl('p', {
 				cls: 'easy-sync-muted',
-				text: 'Select a conflict in the Easy Sync sidebar, then choose Show diff.',
+				text: c.emptyHint,
 			});
 			return;
 		}
@@ -177,7 +179,7 @@ export class ConflictDiffView extends ItemView {
 				cls: 'easy-sync-conflict-path',
 				text: path,
 			});
-			contentEl.createEl('p', { cls: 'easy-sync-muted', text: 'Loading changes…' });
+			contentEl.createEl('p', { cls: 'easy-sync-muted', text: c.loading });
 			return;
 		}
 
@@ -187,7 +189,7 @@ export class ConflictDiffView extends ItemView {
 				cls: 'easy-sync-conflict-path',
 				text: path,
 			});
-			contentEl.createEl('p', { cls: 'easy-sync-muted', text: 'No diff available.' });
+			contentEl.createEl('p', { cls: 'easy-sync-muted', text: c.unavailable });
 			return;
 		}
 
@@ -197,7 +199,7 @@ export class ConflictDiffView extends ItemView {
 			text: path,
 		});
 		const openBtn = header.createEl('button', {
-			text: preview.deviceAvailable ? 'Open file' : 'Not on device',
+			text: preview.deviceAvailable ? c.openFile : c.notOnDevice,
 			cls: 'easy-sync-btn easy-sync-btn-ghost easy-sync-btn-inline',
 		});
 		openBtn.disabled = !preview.deviceAvailable || this.resolving;
@@ -205,21 +207,22 @@ export class ConflictDiffView extends ItemView {
 			void this.openFile(path);
 		});
 
+		const common = t().common;
 		const meta = contentEl.createDiv({ cls: 'easy-sync-diff-meta' });
-		meta.createDiv({ text: `Device ${preview.deviceMeta}` });
-		meta.createDiv({ text: `Cloud ${preview.cloudMeta}` });
+		meta.createDiv({ text: `${common.device} ${preview.deviceMeta}` });
+		meta.createDiv({ text: `${common.cloud} ${preview.cloudMeta}` });
 
 		const legend = contentEl.createDiv({ cls: 'easy-sync-diff-legend' });
-		legend.createSpan({ cls: 'easy-sync-diff-del', text: '− device' });
-		legend.createSpan({ cls: 'easy-sync-diff-add', text: '+ cloud' });
+		legend.createSpan({ cls: 'easy-sync-diff-del', text: c.legendDevice });
+		legend.createSpan({ cls: 'easy-sync-diff-add', text: c.legendCloud });
 
 		const diffHost = contentEl.createDiv({ cls: 'easy-sync-diff easy-sync-diff-page-body' });
 		this.renderDiff(diffHost, preview);
 
 		const actions = contentEl.createDiv({ cls: 'easy-sync-conflict-actions' });
-		this.addResolveButton(actions, 'Keep on this device', 'keep-device', true);
-		this.addResolveButton(actions, 'Keep in the cloud', 'keep-cloud');
-		this.addResolveButton(actions, 'Skip for now', 'skip');
+		this.addResolveButton(actions, c.keepDevice, 'keep-device', true);
+		this.addResolveButton(actions, c.keepCloud, 'keep-cloud');
+		this.addResolveButton(actions, c.skip, 'skip');
 	}
 
 	private addResolveButton(
@@ -245,14 +248,14 @@ export class ConflictDiffView extends ItemView {
 		if (!path) return;
 
 		if (resolution === 'skip') {
-			new Notice('Conflict kept for later. Resolve when ready.');
+			new Notice(t().conflict.skipNotice);
 			await this.closeToSidebar();
 			return;
 		}
 
 		const resolver = this.plugin.getConflictResolver();
 		if (!resolver) {
-			new Notice('Sync system not ready');
+			new Notice(t().conflict.syncNotReady);
 			return;
 		}
 
@@ -260,9 +263,9 @@ export class ConflictDiffView extends ItemView {
 		this.render();
 		try {
 			await resolver.resolve(path, resolution);
-			new Notice(`Conflict resolved: ${path}`);
+			new Notice(t().conflict.resolved(path));
 		} catch (error) {
-			this.noticeAndUnlock(error, 'Resolve failed');
+			this.noticeAndUnlock(error, t().conflict.resolveFailed);
 			this.render();
 			return;
 		}
@@ -281,15 +284,17 @@ export class ConflictDiffView extends ItemView {
 		if (outcome.ok) return;
 
 		if (outcome.step === 'detach') {
-			this.noticeAndUnlock(outcome.error, 'Could not close the diff');
+			this.noticeAndUnlock(outcome.error, t().conflict.closeFailed);
 			// Resolve may already have cleared the journal — reload instead of stale preview.
 			await this.reload();
 			return;
 		}
 
 		const detail =
-			outcome.error instanceof Error ? outcome.error.message : 'Could not return to the sidebar';
-		new Notice(`${detail}. Use the ribbon icon to reopen Easy Sync.`);
+			outcome.error instanceof Error
+				? outcome.error.message
+				: t().conflict.activateFailed;
+		new Notice(t().conflict.activateFailedHint(detail));
 	}
 
 	/** Surface the error and clear the resolving lock; caller chooses render vs reload. */

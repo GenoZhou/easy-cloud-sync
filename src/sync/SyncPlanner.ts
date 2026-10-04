@@ -30,6 +30,7 @@ import { SyncPathCodec } from './SyncPathCodec';
 import { SyncPayloadCodec } from './SyncPayloadCodec';
 import { S3Provider } from '../storage/S3Provider';
 import { decide } from './SyncDecisionTable';
+import { RESET_AUTHORITY_KEY, parseResetAuthority } from './journalKeys';
 
 /**
  * Immutable snapshot of a single local vault file captured during state discovery.
@@ -144,6 +145,7 @@ export class SyncPlanner {
 	 */
 	async buildPlan(): Promise<SyncPlanItem[]> {
 		const contexts = await this.discoverState();
+		const authority = parseResetAuthority(await this.journal.getMetadata(RESET_AUTHORITY_KEY));
 		const plan: SyncPlanItem[] = [];
 
 		for (const ctx of contexts.values()) {
@@ -161,6 +163,7 @@ export class SyncPlanner {
 				hasBaseline: ctx.baseline !== undefined,
 				localFingerprint: ctx.localFingerprint,
 				remoteFingerprint: ctx.remoteFingerprint,
+				authority,
 			};
 
 			const item = decide(input);

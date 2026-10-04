@@ -3,6 +3,7 @@
  */
 
 import { App, Modal } from 'obsidian';
+import { t } from '../i18n';
 
 export class ConfirmModal extends Modal {
 	private resolve: ((value: boolean) => void) | null = null;
@@ -37,7 +38,7 @@ export class ConfirmModal extends Modal {
 		contentEl.createEl('h2', { text: this.title });
 		contentEl.createEl('p', { text: this.message });
 		const row = contentEl.createDiv({ cls: 'easy-sync-modal-actions' });
-		const cancel = row.createEl('button', { text: 'Cancel' });
+		const cancel = row.createEl('button', { text: t().common.cancel });
 		cancel.addEventListener('click', () => {
 			this.settle(false);
 			this.close();

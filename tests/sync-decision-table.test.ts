@@ -78,6 +78,82 @@ describe('SyncDecisionTable.decide', () => {
 		assert.equal(item.action, 'adopt');
 	});
 
+	it('authority local uploads when both sides differ', () => {
+		const item = decide(
+			base({
+				local: 'L+',
+				remote: 'R+',
+				hasBaseline: false,
+				localExists: true,
+				remoteExists: true,
+				localFingerprint: 'sha256:aaa',
+				remoteFingerprint: 'sha256:bbb',
+				authority: 'local',
+			}),
+		);
+		assert.equal(item.action, 'upload');
+	});
+
+	it('authority cloud downloads when both sides differ', () => {
+		const item = decide(
+			base({
+				local: 'L+',
+				remote: 'R+',
+				hasBaseline: false,
+				localExists: true,
+				remoteExists: true,
+				localFingerprint: 'sha256:aaa',
+				remoteFingerprint: 'sha256:bbb',
+				authority: 'cloud',
+			}),
+		);
+		assert.equal(item.action, 'download');
+	});
+
+	it('authority cloud deletes device-only files', () => {
+		const item = decide(
+			base({
+				local: 'L+',
+				remote: 'R0',
+				hasBaseline: false,
+				localExists: true,
+				remoteExists: false,
+				authority: 'cloud',
+			}),
+		);
+		assert.equal(item.action, 'delete-local');
+	});
+
+	it('authority local deletes cloud-only objects', () => {
+		const item = decide(
+			base({
+				local: 'L0',
+				remote: 'R+',
+				hasBaseline: false,
+				localExists: false,
+				remoteExists: true,
+				authority: 'local',
+			}),
+		);
+		assert.equal(item.action, 'delete-remote');
+	});
+
+	it('authority overrides an unresolved conflict skip', () => {
+		const item = decide(
+			base({
+				hasUnresolvedConflict: true,
+				local: 'LΔ',
+				remote: 'RΔ',
+				localExists: true,
+				remoteExists: true,
+				localFingerprint: 'sha256:aaa',
+				remoteFingerprint: 'sha256:bbb',
+				authority: 'cloud',
+			}),
+		);
+		assert.equal(item.action, 'download');
+	});
+
 	it('propagates local edit when remote is unchanged', () => {
 		const item = decide(base({ local: 'LΔ', remote: 'R=' }));
 		assert.equal(item.action, 'upload');

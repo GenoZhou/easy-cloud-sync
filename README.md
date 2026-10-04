@@ -2,6 +2,8 @@
 
 Obsidian community plugin that syncs your vault to **AWS S3**, **Cloudflare R2**, or any **S3-compatible** endpoint, with manual snapshot backups (keeps the last 5) and a conflict UI that never uses `LOCAL_` / `REMOTE_` file names.
 
+中文说明见 [README.zh.md](./README.zh.md)。UI language follows Obsidian (`getLanguage()`): Chinese locales use Chinese copy; everything else uses English.
+
 ## Features
 
 - Bi-directional sync with a three-way journal (IndexedDB baselines)
@@ -10,6 +12,8 @@ Obsidian community plugin that syncs your vault to **AWS S3**, **Cloudflare R2**
 - Sidebar ops surface: last sync summary, conflict list, backups
 - Conflicts: sidebar lists unresolved paths; **Show diff** opens a dedicated page with inline hunks (− device / + cloud) and per-file resolve actions (Keep on this device / Keep in the cloud / Skip)
 - Manual backups under a backup prefix; retain newest 5; Download zip; Restore (overwrite same paths only)
+- **Advanced → Reset local (from cloud)**: clear the journal, then overwrite this device from the cloud
+- **Advanced → Reset cloud (from local)**: clear the journal, then overwrite the cloud from this device
 
 ## Privacy & security
 
