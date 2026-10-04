@@ -1,4 +1,4 @@
-# Easy Sync S3
+# Easy Cloud Sync
 
 Obsidian community plugin that syncs your vault to **AWS S3**, **Cloudflare R2**, or any **S3-compatible** endpoint, with manual snapshot backups (keeps the last 5) and a conflict UI that never uses `LOCAL_` / `REMOTE_` file names.
 
@@ -27,8 +27,8 @@ Obsidian community plugin that syncs your vault to **AWS S3**, **Cloudflare R2**
 ## Setup
 
 1. Install the plugin and enable it in **Settings → Community plugins** (Obsidian 1.11.4+).
-2. Open **Settings → Easy Sync S3** and configure provider, bucket, access key ID, and secret access key (via secret storage), plus prefixes.
-3. Use **Test connection**, then open the **Easy Sync S3** sidebar (ribbon or command) and select **Sync now**.
+2. Open **Settings → Easy Cloud Sync** and configure provider, bucket, access key ID, and secret access key (via secret storage), plus prefixes.
+3. Use **Test connection**, then open the **Easy Cloud Sync** sidebar (ribbon or command) and select **Sync now**.
 
 If you previously installed a beta under `.obsidian/plugins/easy-sync/` or `.obsidian/plugins/easy-sync-s3/`, move or reinstall into `.obsidian/plugins/easy-cloud-sync/` and disable the old folder copy.
 
@@ -37,7 +37,7 @@ If you previously installed a beta under `.obsidian/plugins/easy-sync/` or `.obs
 | ID | Name |
 |----|------|
 | `easy-sync-now` | Sync now |
-| `easy-sync-open-sidebar` | Open Easy Sync S3 sidebar |
+| `easy-sync-open-sidebar` | Open Easy Cloud Sync sidebar |
 | `easy-sync-backup-now` | Backup now |
 
 ## Develop

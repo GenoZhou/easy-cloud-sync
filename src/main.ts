@@ -1,5 +1,5 @@
 /**
- * Easy Sync S3 — Obsidian community plugin
+ * Easy Cloud Sync — Obsidian community plugin
  *
  * Sync a vault to AWS S3, Cloudflare R2, or any S3-compatible endpoint,
  * with manual snapshot backups (retain 5) and conflict resolution UX.

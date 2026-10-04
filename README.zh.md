@@ -1,4 +1,4 @@
-# Easy Sync S3
+# Easy Cloud Sync
 
 Obsidian 社区插件：将笔记库同步到 **AWS S3**、**Cloudflare R2** 或任意 **S3 兼容** 端点；支持手动快照备份（保留最近 5 份）与冲突界面（不使用 `LOCAL_` / `REMOTE_` 文件名）。
 
@@ -27,8 +27,8 @@ Obsidian 社区插件：将笔记库同步到 **AWS S3**、**Cloudflare R2** 或
 ## 安装与设置
 
 1. 安装并启用插件（**设置 → 社区插件**，Obsidian 1.11.4+）。
-2. 打开 **设置 → Easy Sync S3**，配置服务商、存储桶、Access key ID、Secret access key（密钥存储）与前缀。
-3. 使用 **测试连接**，然后打开 **Easy Sync S3** 侧边栏（功能区或命令），选择 **立即同步**。
+2. 打开 **设置 → Easy Cloud Sync**，配置服务商、存储桶、Access key ID、Secret access key（密钥存储）与前缀。
+3. 使用 **测试连接**，然后打开 **Easy Cloud Sync** 侧边栏（功能区或命令），选择 **立即同步**。
 
 若此前 beta 安装在 `.obsidian/plugins/easy-sync/` 或 `.obsidian/plugins/easy-sync-s3/`，请改用（或迁移到）`.obsidian/plugins/easy-cloud-sync/`，并停用旧目录副本。
 
