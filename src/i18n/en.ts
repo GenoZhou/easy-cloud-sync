@@ -9,7 +9,7 @@ export const en = {
 		syncNow: 'Sync now',
 		openSidebar: 'Open sidebar',
 		backupNow: 'Backup now',
-		ribbonOpen: 'Open Easy Sync',
+		ribbonOpen: 'Open Easy Sync S3',
 	},
 	settings: {
 		privacyHeading: 'Privacy',
@@ -71,7 +71,7 @@ export const en = {
 			'This clears local sync history and the next sync will overwrite the cloud with this device’s contents. Cloud-only objects under the sync prefix may be deleted. Continue?',
 	},
 	sidebar: {
-		title: 'Easy Sync',
+		title: 'Easy Sync S3',
 		configurePrompt: 'Configure your S3 connection in settings to start syncing.',
 		openSettings: 'Open settings',
 		syncNow: 'Sync now',
@@ -110,7 +110,7 @@ export const en = {
 			`Restore finished with errors: ${restored} restored, ${failed} failed`,
 	},
 	conflict: {
-		emptyHint: 'Select a conflict in the Easy Sync sidebar, then choose Show diff.',
+		emptyHint: 'Select a conflict in the Easy Sync S3 sidebar, then choose Show diff.',
 		loading: 'Loading changes…',
 		unavailable: 'No diff available.',
 		openFile: 'Open file',
@@ -126,7 +126,7 @@ export const en = {
 		closeFailed: 'Could not close the diff',
 		activateFailed: 'Could not return to the sidebar',
 		activateFailedHint: (detail: string) =>
-			`${detail}. Use the ribbon icon to reopen Easy Sync.`,
+			`${detail}. Use the ribbon icon to reopen Easy Sync S3.`,
 		skipNotice: 'Conflict kept for later. Resolve when ready.',
 		viewTitle: 'Conflict diff',
 		viewTitlePath: (path: string) => `Diff · ${path}`,
@@ -135,7 +135,7 @@ export const en = {
 		configureBeforeSync: 'Configure S3 connection in settings before syncing.',
 		configureBeforeBackup: 'Configure S3 connection in settings before backing up.',
 		syncInProgress: 'Sync already in progress…',
-		syncDidNotRun: 'Sync did not run — check the Easy Sync sidebar for details.',
+		syncDidNotRun: 'Sync did not run — check the Easy Sync S3 sidebar for details.',
 		syncErrors: (message: string) => `Sync completed with errors: ${message}`,
 		syncConflicts: (n: number) => `Sync completed with ${n} conflict(s)`,
 		syncDone: (up: number, down: number, del: number) =>

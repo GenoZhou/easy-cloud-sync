@@ -29,7 +29,7 @@ describe('path excludes and prefixes', () => {
 
 	it('detects this plugin’s own config paths', () => {
 		assert.equal(
-			isPluginOwnPath('.obsidian/plugins/easy-sync/data.json', '.obsidian'),
+			isPluginOwnPath('.obsidian/plugins/easy-sync-s3/data.json', '.obsidian'),
 			true,
 		);
 		assert.equal(

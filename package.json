@@ -1,5 +1,5 @@
 {
-	"name": "easy-sync",
+	"name": "easy-sync-s3",
 	"version": "1.0.1-beta.6",
 	"description": "Sync your Obsidian vault to AWS S3, Cloudflare R2, or any S3-compatible storage, with manual snapshot backups.",
 	"main": "main.js",
