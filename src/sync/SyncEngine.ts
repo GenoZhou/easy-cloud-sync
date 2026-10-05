@@ -124,10 +124,11 @@ export class SyncEngine {
 	/**
 	 * Run a full sync cycle: plan → execute → persist metadata.
 	 *
+	 * @param onProgress - Optional callback after each plan item settles (`done`/`total`).
 	 * @returns A {@link SyncResult} summarising what happened.
 	 * @throws If called while another sync is already running.
 	 */
-	async sync(): Promise<SyncResult> {
+	async sync(onProgress?: (done: number, total: number) => void): Promise<SyncResult> {
 		if (this.isSyncing) {
 			throw new Error('Sync already in progress');
 		}
@@ -196,7 +197,7 @@ export class SyncEngine {
 				this.deviceId,
 				this.debugLogging,
 			);
-			const result = await executor.execute(actionable);
+			const result = await executor.execute(actionable, onProgress);
 			result.filesSkipped = skippedCount;
 
 			// Phase 3 — Persist metadata

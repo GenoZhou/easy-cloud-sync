@@ -10,6 +10,7 @@
 import { S3Provider } from '../storage/S3Provider';
 import { EasySyncSettings, BackupInfo, BackupManifest, BACKUP_RETAIN_COPIES } from '../types';
 import { addPrefix, normalizePrefix } from '../utils/paths';
+import type { DeleteAllBackupsResult } from '../utils/operationUi';
 
 export class RetentionManager {
 	private s3Provider: S3Provider;
@@ -102,6 +103,21 @@ export class RetentionManager {
 	async deleteBackup(backupName: string): Promise<void> {
 		const prefix = addPrefix(`${backupName}/`, this.normalizedBackupPrefix);
 		await this.s3Provider.deletePrefix(prefix);
+	}
+
+	/** Delete every listed `backup-*` snapshot; report deleted vs failed counts. */
+	async deleteAllBackups(): Promise<DeleteAllBackupsResult> {
+		const backups = await this.listBackups();
+		const settled = await Promise.allSettled(
+			backups.map((backup) => this.deleteBackup(backup.name)),
+		);
+		let deleted = 0;
+		let failed = 0;
+		for (const outcome of settled) {
+			if (outcome.status === 'fulfilled') deleted++;
+			else failed++;
+		}
+		return { deleted, failed };
 	}
 
 	private parseTimestampFromFolderName(folderName: string): string {

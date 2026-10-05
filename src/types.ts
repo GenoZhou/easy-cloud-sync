@@ -230,6 +230,12 @@ export interface BackupResult {
 	errors: string[];
 }
 
+/** In-flight sync or backup progress for sidebar button labels. */
+export interface OperationProgress {
+	done: number;
+	total: number;
+}
+
 // =============================================================================
 // Last sync summary (sidebar)
 // =============================================================================

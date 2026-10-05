@@ -32,7 +32,11 @@ export class SnapshotCreator {
 		this.normalizedBackupPrefix = normalizePrefix(settings.backupPrefix);
 	}
 
-	async createSnapshot(deviceId: string, deviceName: string): Promise<BackupResult> {
+	async createSnapshot(
+		deviceId: string,
+		deviceName: string,
+		onProgress?: (done: number, total: number) => void,
+	): Promise<BackupResult> {
 		const startedAt = Date.now();
 		const backupName = this.generateBackupName();
 
@@ -48,12 +52,15 @@ export class SnapshotCreator {
 		};
 
 		try {
-			const files = this.app.vault.getFiles();
+			const files = this.app.vault
+				.getFiles()
+				.filter((file) => !this.shouldExclude(file.path));
 			const checksums: Record<string, string> = {};
+			const total = files.length;
+			let done = 0;
+			onProgress?.(done, total);
 
 			for (const file of files) {
-				if (this.shouldExclude(file.path)) continue;
-
 				try {
 					await this.backupFile(file, backupName, checksums);
 					result.filesBackedUp++;
@@ -62,6 +69,8 @@ export class SnapshotCreator {
 					const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 					result.errors.push(`${file.path}: ${errorMessage}`);
 				}
+				done++;
+				onProgress?.(done, total);
 			}
 
 			const manifest: BackupManifest = {

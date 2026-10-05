@@ -235,7 +235,7 @@ export class ConflictDiffView extends ItemView {
 			text: label,
 			cls: primary
 				? 'easy-sync-btn easy-sync-btn-primary'
-				: 'easy-sync-btn easy-sync-btn-secondary',
+				: 'easy-sync-btn easy-sync-btn-ghost easy-sync-btn-block',
 		});
 		btn.disabled = this.resolving;
 		btn.addEventListener('click', () => {

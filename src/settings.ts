@@ -59,7 +59,7 @@ export class EasySyncSettingTab extends PluginSettingTab {
 				heading: s.privacyHeading,
 				items: [
 					{
-						name: s.privacyHeading,
+						name: s.privacyNoticeName,
 						desc: s.privacyBody(configDir),
 						aliases: ['privacy', 'encryption', 'secret storage'],
 					},
@@ -194,6 +194,24 @@ export class EasySyncSettingTab extends PluginSettingTab {
 							setting.controlEl.createEl('pre', {
 								cls: 'easy-sync-bucket-tree',
 								text: this.bucketLayoutText(),
+							});
+						},
+					},
+					{
+						name: s.backupHelpName,
+						desc: s.backupHelpDesc,
+						aliases: ['backup', 'snapshot', 'restore'],
+					},
+					{
+						name: s.deleteAllBackupsName,
+						desc: s.deleteAllBackupsDesc,
+						render: (setting) => {
+							setting.addButton((btn) => {
+								btn.setButtonText(s.deleteAllBackupsButton)
+									.setDestructive()
+									.onClick(() => {
+										void this.confirmDeleteAllBackups();
+									});
 							});
 						},
 					},
@@ -369,6 +387,35 @@ export class EasySyncSettingTab extends PluginSettingTab {
 			await this.plugin.runAuthorityReset(authority);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : t().notices.resetFailed;
+			new Notice(message);
+		}
+	}
+
+	private async confirmDeleteAllBackups(): Promise<void> {
+		const s = t().settings;
+		const confirmed = await new ConfirmModal(
+			this.app,
+			s.deleteAllBackupsConfirmTitle,
+			s.deleteAllBackupsConfirmBody,
+			s.deleteAllBackupsButton,
+		).openAndWait();
+
+		if (!confirmed) return;
+
+		try {
+			const { deleted, failed } = await this.plugin.deleteAllBackups();
+			if (failed > 0 && deleted === 0) {
+				new Notice(t().notices.deleteAllBackupsFailed);
+			} else if (failed > 0) {
+				new Notice(t().notices.deleteAllBackupsPartial(deleted, failed));
+			} else if (deleted === 0) {
+				new Notice(t().notices.deleteAllBackupsNone);
+			} else {
+				new Notice(t().notices.deleteAllBackupsDone(deleted));
+			}
+		} catch (error) {
+			const message =
+				error instanceof Error ? error.message : t().notices.deleteAllBackupsFailed;
 			new Notice(message);
 		}
 	}

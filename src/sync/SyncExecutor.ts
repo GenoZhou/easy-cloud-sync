@@ -121,7 +121,10 @@ export class SyncExecutor {
 	 * @returns A {@link SyncResult} aggregating counters, conflict paths, and
 	 *   any errors that occurred.  `success` is `true` only when `errors` is empty.
 	 */
-	async execute(plan: SyncPlanItem[]): Promise<SyncResult> {
+	async execute(
+		plan: SyncPlanItem[],
+		onProgress?: (done: number, total: number) => void,
+	): Promise<SyncResult> {
 		const result: SyncResult = {
 			success: false,
 			startedAt: Date.now(),
@@ -135,6 +138,10 @@ export class SyncExecutor {
 			conflicts: [],
 			errors: [],
 		};
+
+		let total = plan.length;
+		let done = 0;
+		onProgress?.(done, total);
 
 		let errorCount = 0;
 		let planIndex = 0;
@@ -163,9 +170,17 @@ export class SyncExecutor {
 						// Remove self from the set once settled so the outer loop
 						// can accurately measure how many items are still running.
 						inFlight.delete(promise);
+						done++;
+						onProgress?.(done, total);
 					});
 
 				inFlight.add(promise);
+			}
+
+			// Fail-fast: stop accepting new work; shrink denominator to dispatched.
+			if (errorCount >= MAX_ERRORS && planIndex < plan.length) {
+				total = planIndex;
+				onProgress?.(done, total);
 			}
 
 			if (inFlight.size > 0) {

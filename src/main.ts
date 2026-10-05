@@ -14,6 +14,7 @@ import {
 	EasySyncSettings,
 	EMPTY_SYNC_SUMMARY,
 	LastSyncSummary,
+	OperationProgress,
 	ResetAuthority,
 	SyncResult,
 } from './types';
@@ -34,10 +35,14 @@ import { allowsAutomaticSync } from './sync/autoSync';
 import { SnapshotCreator } from './backup/SnapshotCreator';
 import { BackupDownloader } from './backup/BackupDownloader';
 import { RetentionManager } from './backup/RetentionManager';
+import { BackupRestore } from './backup/BackupRestore';
 import { getOrCreateDeviceId } from './utils/deviceId';
 import { ConflictResolver } from './ui/ConflictResolver';
 import { ConflictDiffView, EASY_SYNC_DIFF_VIEW_TYPE } from './ui/ConflictDiffView';
 import { EasySyncSidebarView, EASY_SYNC_VIEW_TYPE } from './ui/SidebarView';
+import { ConfirmModal } from './ui/ConfirmModal';
+import { normalizePrefix } from './utils/paths';
+import { isOperationBusy, shouldRefreshBackupList } from './utils/operationUi';
 import { t } from './i18n';
 
 /** Journal metadata key for durable last-sync sidebar summary (JSON string). */
@@ -59,11 +64,20 @@ export default class EasySyncPlugin extends Plugin {
 	private conflictResolver: ConflictResolver | null = null;
 	private deviceId = '';
 	private isBackupRunning = false;
+	private isRestoreRunning = false;
+	private syncProgress: OperationProgress | null = null;
+	private backupProgress: OperationProgress | null = null;
 	private lastSyncSummary: LastSyncSummary = { ...EMPTY_SYNC_SUMMARY };
+	/** Last backup prefix / connection state applied to the sidebar cache. */
+	private sidebarBackupPrefix: string | null = null;
+	private sidebarConnectionConfigured = false;
+	private progressUiFrame: number | null = null;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
 		this.deviceId = getOrCreateDeviceId(this.app);
+		this.sidebarBackupPrefix = normalizePrefix(this.settings.backupPrefix);
+		this.sidebarConnectionConfigured = isConnectionConfigured(this.app, this.settings);
 
 		this.s3Provider = new S3Provider(this.settings, this.app);
 
@@ -89,15 +103,23 @@ export default class EasySyncPlugin extends Plugin {
 
 		this.syncScheduler = new SyncScheduler(this, this.syncEngine, this.settings);
 		this.syncScheduler.setCallbacks({
+			canStartSync: () => !this.isBackupInProgress() && !this.isRestoreInProgress(),
 			onSyncStart: () => {
+				this.syncProgress = { done: 0, total: 0 };
 				this.lastSyncSummary = {
 					...this.lastSyncSummary,
 					status: 'syncing',
 					lastError: null,
 				};
-				this.refreshSidebar();
+				this.refreshSidebarUi();
+			},
+			onSyncProgress: (done, total) => {
+				this.syncProgress = { done, total };
+				this.scheduleProgressUi();
 			},
 			onSyncComplete: (result) => {
+				this.clearProgressUiSchedule();
+				this.syncProgress = null;
 				this.lastSyncSummary = summaryFromResult(result);
 				void this.persistLastSyncSummary();
 				this.refreshSidebar();
@@ -107,6 +129,8 @@ export default class EasySyncPlugin extends Plugin {
 				}
 			},
 			onSyncError: (error) => {
+				this.clearProgressUiSchedule();
+				this.syncProgress = null;
 				this.lastSyncSummary = {
 					...this.lastSyncSummary,
 					status: 'error',
@@ -170,6 +194,9 @@ export default class EasySyncPlugin extends Plugin {
 	}
 
 	async saveSettings(): Promise<void> {
+		const previousBackupPrefix = this.sidebarBackupPrefix;
+		const wasConfigured = this.sidebarConnectionConfigured;
+
 		await this.saveData(this.settings);
 
 		this.s3Provider?.updateSettings(this.settings);
@@ -181,13 +208,28 @@ export default class EasySyncPlugin extends Plugin {
 		this.retentionManager?.updateSettings(this.settings);
 		this.changeTracker?.updateExcludePatterns(this.settings.excludePatterns);
 
+		const isConfigured = isConnectionConfigured(this.app, this.settings);
+		const nextBackupPrefix = normalizePrefix(this.settings.backupPrefix);
+		this.sidebarBackupPrefix = nextBackupPrefix;
+		this.sidebarConnectionConfigured = isConfigured;
+
 		// Start/stop scheduler from connection state; avoid tearing down ChangeTracker on every keystroke.
-		if (isConnectionConfigured(this.app, this.settings)) {
+		if (isConfigured) {
 			this.syncScheduler?.start();
 		} else {
 			this.syncScheduler?.stop();
 		}
 		this.refreshSidebar();
+		if (
+			shouldRefreshBackupList({
+				previousBackupPrefix,
+				nextBackupPrefix,
+				wasConfigured,
+				isConfigured,
+			})
+		) {
+			this.refreshSidebarBackups();
+		}
 	}
 
 	/**
@@ -202,8 +244,8 @@ export default class EasySyncPlugin extends Plugin {
 		if (!isConnectionConfigured(this.app, this.settings)) {
 			throw new Error(t().notices.configureBeforeSync);
 		}
-		if (this.isSyncInProgress()) {
-			throw new Error(t().notices.syncInProgress);
+		if (this.isVaultMutationBusy()) {
+			throw new Error(this.busyNoticeMessage());
 		}
 
 		await this.syncJournal.clear();
@@ -220,7 +262,7 @@ export default class EasySyncPlugin extends Plugin {
 				? t().notices.resetLocalStarted
 				: t().notices.resetCloudStarted,
 		);
-		await this.triggerManualSync({ skipStartNotice: true });
+		await this.triggerManualSync();
 	}
 
 	private registerCommands(): void {
@@ -261,20 +303,17 @@ export default class EasySyncPlugin extends Plugin {
 		this.syncScheduler?.stop();
 	}
 
-	async triggerManualSync(options?: { skipStartNotice?: boolean }): Promise<void> {
+	async triggerManualSync(): Promise<void> {
 		if (!isConnectionConfigured(this.app, this.settings)) {
 			new Notice(t().notices.configureBeforeSync);
 			return;
 		}
 
-		if (this.isSyncInProgress()) {
-			new Notice(t().notices.syncInProgress);
+		if (this.isVaultMutationBusy()) {
+			new Notice(this.busyNoticeMessage());
 			return;
 		}
 
-		if (!options?.skipStartNotice) {
-			new Notice(t().notices.startingSync);
-		}
 		const result = await this.syncScheduler?.triggerSync('manual');
 
 		if (!result) {
@@ -290,16 +329,8 @@ export default class EasySyncPlugin extends Plugin {
 
 		if (result.conflicts.length > 0) {
 			new Notice(t().notices.syncConflicts(result.conflicts.length));
-			return;
 		}
-
-		new Notice(
-			t().notices.syncDone(
-				result.filesUploaded,
-				result.filesDownloaded,
-				result.filesDeleted,
-			),
-		);
+		// Success / progress: sidebar status + counts; no toast.
 	}
 
 	async triggerManualBackup(): Promise<void> {
@@ -308,8 +339,8 @@ export default class EasySyncPlugin extends Plugin {
 			return;
 		}
 
-		if (this.isBackupRunning) {
-			new Notice(t().notices.backupInProgress);
+		if (this.isVaultMutationBusy()) {
+			new Notice(this.busyNoticeMessage());
 			return;
 		}
 
@@ -318,30 +349,96 @@ export default class EasySyncPlugin extends Plugin {
 			return;
 		}
 
-		new Notice(t().notices.startingBackup);
 		this.isBackupRunning = true;
+		this.backupProgress = { done: 0, total: 0 };
+		this.refreshSidebarUi();
 
 		try {
 			const vaultName = this.app.vault.getName();
-			const result = await this.snapshotCreator.createSnapshot(this.deviceId, vaultName);
+			const result = await this.snapshotCreator.createSnapshot(
+				this.deviceId,
+				vaultName,
+				(done, total) => {
+					this.backupProgress = { done, total };
+					this.scheduleProgressUi();
+				},
+			);
 
 			// Retain-5 whenever a snapshot exists on S3, including partial success.
 			if (result.snapshotCreated) {
 				await this.retentionManager.applyRetentionPolicy();
 			}
 
-			if (result.success) {
-				new Notice(t().notices.backupDone(result.filesBackedUp));
-			} else {
+			if (!result.success) {
 				const errorMsg = result.errors[0] ?? t().notices.unknownError;
 				new Notice(t().notices.backupErrors(errorMsg));
 			}
+			// Success / progress: sidebar button label + backup list refresh; no toast.
 		} catch (error) {
 			const errorMessage =
 				error instanceof Error ? error.message : t().notices.unknownError;
 			new Notice(t().notices.backupFailed(errorMessage));
 		} finally {
+			this.clearProgressUiSchedule();
 			this.isBackupRunning = false;
+			this.backupProgress = null;
+			this.refreshSidebarBackups();
+		}
+	}
+
+	async deleteAllBackups(): Promise<{ deleted: number; failed: number }> {
+		if (!this.retentionManager) {
+			throw new Error(t().notices.backupNotReady);
+		}
+		if (this.isVaultMutationBusy()) {
+			throw new Error(this.busyNoticeMessage());
+		}
+		const result = await this.retentionManager.deleteAllBackups();
+		this.refreshSidebarBackups();
+		return { deleted: result.deleted, failed: result.failed };
+	}
+
+	async triggerRestoreBackup(backupName: string): Promise<void> {
+		if (!isConnectionConfigured(this.app, this.settings)) {
+			new Notice(t().notices.configureBeforeBackup);
+			return;
+		}
+		if (this.isVaultMutationBusy()) {
+			new Notice(this.busyNoticeMessage());
+			return;
+		}
+
+		const downloader = this.backupDownloader;
+		if (!downloader) {
+			new Notice(t().notices.backupNotReady);
+			return;
+		}
+
+		const b = t().backup;
+		const ok = await new ConfirmModal(
+			this.app,
+			b.restoreTitle,
+			b.restoreBody(backupName),
+			b.restoreConfirm,
+			'mod-cta',
+		).openAndWait();
+		if (!ok) return;
+
+		this.isRestoreRunning = true;
+		this.refreshSidebarUi();
+
+		try {
+			const result = await new BackupRestore(this.app, downloader).restore(backupName);
+			if (result.errors.length > 0) {
+				new Notice(b.restoreErrors(result.restored, result.errors.length));
+			} else {
+				new Notice(b.restoreDone(result.restored));
+			}
+		} catch (error) {
+			const message = error instanceof Error ? error.message : t().notices.unknownError;
+			new Notice(b.restoreFailed(message));
+		} finally {
+			this.isRestoreRunning = false;
 			this.refreshSidebar();
 		}
 	}
@@ -391,17 +488,95 @@ export default class EasySyncPlugin extends Plugin {
 		this.refreshSidebar();
 	}
 
-	private refreshSidebar(): void {
+	private forEachSidebarView(fn: (view: EasySyncSidebarView) => void): void {
 		for (const leaf of this.app.workspace.getLeavesOfType(EASY_SYNC_VIEW_TYPE)) {
 			const view = leaf.view;
 			if (view instanceof EasySyncSidebarView) {
-				void view.refresh();
+				fn(view);
 			}
 		}
 	}
 
+	/** Sync status + conflicts only (does not re-fetch the backup list). */
+	private refreshSidebar(): void {
+		this.forEachSidebarView((view) => {
+			void view.refreshSyncState();
+		});
+	}
+
+	/** Reload backup list from S3 (after backup / delete / explicit refresh). */
+	private refreshSidebarBackups(): void {
+		this.forEachSidebarView((view) => {
+			void view.refreshBackups();
+		});
+	}
+
+	/** Update sidebar action controls in place (no remote fetch / no full rebuild). */
+	private refreshSidebarUi(): void {
+		this.forEachSidebarView((view) => {
+			view.updateOperationUi();
+		});
+	}
+
+	/** Coalesce per-item progress updates to one paint per animation frame. */
+	private scheduleProgressUi(): void {
+		if (this.progressUiFrame !== null) return;
+		this.progressUiFrame = window.requestAnimationFrame(() => {
+			this.progressUiFrame = null;
+			this.refreshSidebarUi();
+		});
+	}
+
+	private clearProgressUiSchedule(): void {
+		if (this.progressUiFrame === null) return;
+		window.cancelAnimationFrame(this.progressUiFrame);
+		this.progressUiFrame = null;
+	}
+
 	getLastSyncSummary(): LastSyncSummary {
 		return this.lastSyncSummary;
+	}
+
+	/** Next scheduled sync (ms), or null when manual-only. */
+	getNextSyncAt(): number | null {
+		return this.syncScheduler?.getNextSyncAt() ?? null;
+	}
+
+	getSyncProgress(): OperationProgress | null {
+		return this.syncProgress;
+	}
+
+	getBackupProgress(): OperationProgress | null {
+		return this.backupProgress;
+	}
+
+	isBackupInProgress(): boolean {
+		return this.isBackupRunning;
+	}
+
+	isRestoreInProgress(): boolean {
+		return this.isRestoreRunning;
+	}
+
+	/** Sync, backup, or restore is in flight (includes pre-engine progress flags). */
+	isVaultMutationBusy(): boolean {
+		return isOperationBusy({
+			syncInProgress: this.isSyncInProgress(),
+			backupRunning: this.isBackupRunning,
+			restoreRunning: this.isRestoreRunning,
+			syncProgress: this.syncProgress,
+			backupProgress: this.backupProgress,
+		});
+	}
+
+	private busyNoticeMessage(): string {
+		if (this.isSyncInProgress() || this.syncProgress !== null) {
+			return t().notices.syncInProgress;
+		}
+		if (this.isBackupRunning || this.backupProgress !== null) {
+			return t().notices.backupInProgress;
+		}
+		return t().notices.restoreInProgress;
 	}
 
 	/** Restore last-run summary from the journal so the sidebar survives reload. */

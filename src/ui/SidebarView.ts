@@ -1,15 +1,15 @@
 /**
  * Easy Sync sidebar — compact ops surface (no status bar).
  *
- * Status + counts on one line; Sync/Backup are buttons only; each conflict
- * row is path + Show diff (mtime/size live on the diff page).
+ * Sync status + Sync now; conflicts; Backups heading + list + Backup now / Refresh.
+ * Backup list is loaded on open and via explicit refresh — not on every sync.
  */
 
-import { ItemView, Notice, WorkspaceLeaf } from 'obsidian';
+import { ItemView, WorkspaceLeaf } from 'obsidian';
 import type EasySyncPlugin from '../main';
-import { BackupInfo, ConflictRecord, LastSyncSummary } from '../types';
+import { BACKUP_RETAIN_COPIES, BackupInfo, ConflictRecord, LastSyncSummary } from '../types';
 import { isConnectionConfigured } from '../storage/S3Config';
-import { restoreBackupWithConfirm } from '../backup/BackupRestore';
+import { formatOperationActionLabel } from '../utils/operationUi';
 import { t } from '../i18n';
 
 export const EASY_SYNC_VIEW_TYPE = 'easy-sync-sidebar';
@@ -19,6 +19,15 @@ export class EasySyncSidebarView extends ItemView {
 	private conflicts: ConflictRecord[] = [];
 	private backups: BackupInfo[] = [];
 	private backupsLoading = false;
+	private backupsLoaded = false;
+	private backupsError: string | null = null;
+
+	private statusLineEl: HTMLElement | null = null;
+	private nextSyncEl: HTMLElement | null = null;
+	private syncBtn: HTMLButtonElement | null = null;
+	private backupBtn: HTMLButtonElement | null = null;
+	private refreshBackupsBtn: HTMLButtonElement | null = null;
+	private restoreButtons: HTMLButtonElement[] = [];
 
 	constructor(leaf: WorkspaceLeaf, plugin: EasySyncPlugin) {
 		super(leaf);
@@ -43,35 +52,126 @@ export class EasySyncSidebarView extends ItemView {
 
 	async onClose(): Promise<void> {
 		this.contentEl.empty();
+		this.clearControlRefs();
 	}
 
-	async refresh(): Promise<void> {
-		if (!isConnectionConfigured(this.app, this.plugin.settings)) {
-			this.conflicts = [];
-			this.backups = [];
-			this.backupsLoading = false;
-			this.render();
+	/**
+	 * Update in-flight controls without rebuilding the sidebar DOM
+	 * (progress labels, disabled state, status line).
+	 */
+	updateOperationUi(): void {
+		if (!this.syncBtn || !this.backupBtn) {
 			return;
 		}
 
+		const s = t().sidebar;
+		const summary = this.plugin.getLastSyncSummary();
+		const syncProgress = this.plugin.getSyncProgress();
+		const backupProgress = this.plugin.getBackupProgress();
+		const busy = this.plugin.isVaultMutationBusy();
+
+		if (this.statusLineEl) {
+			this.statusLineEl.setText(statusLineText(summary));
+		}
+
+		if (this.nextSyncEl) {
+			this.nextSyncEl.setText(nextSyncLabel(this.plugin.getNextSyncAt()));
+		}
+
+		this.syncBtn.setText(
+			formatOperationActionLabel(
+				s.syncNow,
+				s.statusSyncing,
+				s.syncingProgress,
+				syncProgress,
+			),
+		);
+		this.backupBtn.setText(
+			formatOperationActionLabel(
+				s.backupNow,
+				s.statusBackingUp,
+				s.backingUpProgress,
+				backupProgress,
+			),
+		);
+		this.syncBtn.disabled = busy;
+		this.backupBtn.disabled = busy;
+		if (this.refreshBackupsBtn) {
+			this.refreshBackupsBtn.disabled = busy || this.backupsLoading;
+		}
+		for (const btn of this.restoreButtons) {
+			btn.disabled = busy;
+		}
+	}
+
+	/** Initial / full load: sync state + backup list. */
+	async refresh(): Promise<void> {
+		await this.reloadConflicts();
+		await this.reloadBackups();
+		this.render();
+	}
+
+	/** Sync status + conflicts only; keep cached backup list. */
+	async refreshSyncState(): Promise<void> {
+		await this.reloadConflicts();
+		this.render();
+	}
+
+	/** Explicitly reload the backup list from S3. */
+	async refreshBackups(): Promise<void> {
+		await this.reloadBackups();
+		this.render();
+	}
+
+	private async reloadConflicts(): Promise<void> {
+		if (!isConnectionConfigured(this.app, this.plugin.settings)) {
+			this.conflicts = [];
+			return;
+		}
 		this.conflicts = (await this.plugin.getSyncJournal()?.getAllConflicts()) ?? [];
+	}
+
+	private async reloadBackups(): Promise<void> {
+		if (!isConnectionConfigured(this.app, this.plugin.settings)) {
+			this.backups = [];
+			this.backupsLoading = false;
+			this.backupsLoaded = false;
+			this.backupsError = null;
+			return;
+		}
+
 		this.backupsLoading = true;
+		this.backupsError = null;
 		this.render();
 
 		try {
 			this.backups = (await this.plugin.getRetentionManager()?.listBackups()) ?? [];
-			this.backups = this.backups.slice(0, 5);
-		} catch {
+			this.backups = this.backups.slice(0, BACKUP_RETAIN_COPIES);
+			this.backupsLoaded = true;
+			this.backupsError = null;
+		} catch (error) {
 			this.backups = [];
+			this.backupsLoaded = true;
+			this.backupsError =
+				error instanceof Error ? error.message : t().sidebar.loadBackupsFailed;
 		} finally {
 			this.backupsLoading = false;
 		}
-		this.render();
+	}
+
+	private clearControlRefs(): void {
+		this.statusLineEl = null;
+		this.nextSyncEl = null;
+		this.syncBtn = null;
+		this.backupBtn = null;
+		this.refreshBackupsBtn = null;
+		this.restoreButtons = [];
 	}
 
 	private render(): void {
 		const { contentEl } = this;
 		contentEl.empty();
+		this.clearControlRefs();
 		contentEl.addClass('easy-sync-sidebar');
 		const s = t().sidebar;
 
@@ -98,24 +198,20 @@ export class EasySyncSidebarView extends ItemView {
 			return;
 		}
 
-		this.renderLastSync(contentEl);
-		this.renderSyncActions(contentEl);
+		this.renderSyncSection(contentEl);
 		this.renderConflicts(contentEl);
-		this.renderBackups(contentEl);
+		this.renderBackupSection(contentEl);
+		this.updateOperationUi();
 	}
 
-	private renderLastSync(container: HTMLElement): void {
+	private renderSyncSection(container: HTMLElement): void {
 		const section = container.createDiv({ cls: 'easy-sync-section' });
 		const summary = this.plugin.getLastSyncSummary();
 		const s = t().sidebar;
 
-		const statusParts = [statusLabel(summary)];
-		if (summary.completedAt) {
-			statusParts.push(new Date(summary.completedAt).toLocaleString());
-		}
-		section.createEl('p', {
+		this.statusLineEl = section.createEl('p', {
 			cls: 'easy-sync-status-line',
-			text: statusParts.join(' · '),
+			text: statusLineText(summary),
 		});
 
 		section.createEl('p', {
@@ -129,22 +225,25 @@ export class EasySyncSidebarView extends ItemView {
 			),
 		});
 
+		this.nextSyncEl = section.createEl('p', {
+			cls: 'easy-sync-muted easy-sync-next-sync',
+			text: nextSyncLabel(this.plugin.getNextSyncAt()),
+		});
+
 		if (summary.lastError) {
 			section.createEl('p', {
 				cls: 'easy-sync-error',
 				text: summary.lastError,
 			});
 		}
-	}
 
-	private renderSyncActions(container: HTMLElement): void {
-		const section = container.createDiv({ cls: 'easy-sync-section' });
-		const syncBtn = section.createEl('button', {
-			text: t().sidebar.syncNow,
-			cls: 'easy-sync-btn easy-sync-btn-primary',
+		this.syncBtn = section.createEl('button', {
+			text: s.syncNow,
+			cls: 'easy-sync-btn easy-sync-btn-ghost easy-sync-btn-block',
 		});
-		syncBtn.addEventListener('click', () => {
-			void this.plugin.triggerManualSync().then(() => this.refresh());
+		this.syncBtn.addEventListener('click', () => {
+			// Sync complete/error callbacks refresh sync UI; avoid a second list fetch here.
+			void this.plugin.triggerManualSync();
 		});
 	}
 
@@ -183,73 +282,102 @@ export class EasySyncSidebarView extends ItemView {
 		}
 	}
 
-	private renderBackups(container: HTMLElement): void {
+	private renderBackupSection(container: HTMLElement): void {
 		const section = container.createDiv({ cls: 'easy-sync-section' });
 		const s = t().sidebar;
 
-		const backupBtn = section.createEl('button', {
-			text: s.backupNow,
-			cls: 'easy-sync-btn easy-sync-btn-primary',
-		});
-		backupBtn.addEventListener('click', () => {
-			void this.plugin.triggerManualBackup().then(() => this.refresh());
+		section.createEl('h3', {
+			cls: 'easy-sync-section-heading',
+			text: s.backupsHeading,
 		});
 
-		if (this.backupsLoading) {
+		if (this.backupsLoading || !this.backupsLoaded) {
 			section.createEl('p', {
 				cls: 'easy-sync-muted',
 				text: s.loadingBackups,
 			});
-			return;
-		}
-
-		if (this.backups.length === 0) {
+		} else if (this.backupsError !== null) {
+			section.createEl('p', {
+				cls: 'easy-sync-error',
+				text: this.backupsError || s.loadBackupsFailed,
+			});
+		} else if (this.backups.length === 0) {
 			section.createEl('p', {
 				cls: 'easy-sync-muted',
 				text: s.noBackupsYet,
 			});
-			return;
+		} else {
+			const list = section.createEl('ul', { cls: 'easy-sync-backup-list' });
+			for (const backup of this.backups) {
+				const item = list.createEl('li', { cls: 'easy-sync-backup-item' });
+				const row = item.createDiv({ cls: 'easy-sync-backup-row' });
+				row.createDiv({
+					cls: 'easy-sync-backup-meta',
+					text: s.backupMeta(
+						new Date(backup.timestamp).toLocaleString(),
+						backup.fileCount,
+					),
+				});
+				const restoreBtn = row.createEl('button', {
+					text: s.restore,
+					cls: 'easy-sync-btn easy-sync-btn-ghost easy-sync-btn-inline',
+				});
+				this.restoreButtons.push(restoreBtn);
+				restoreBtn.addEventListener('click', () => {
+					void this.plugin.triggerRestoreBackup(backup.name);
+				});
+			}
 		}
 
-		const list = section.createEl('ul', { cls: 'easy-sync-backup-list' });
-		for (const backup of this.backups) {
-			const item = list.createEl('li', { cls: 'easy-sync-backup-item' });
-			const row = item.createDiv({ cls: 'easy-sync-backup-row' });
-			row.createDiv({
-				cls: 'easy-sync-backup-meta',
-				text: s.backupMeta(
-					new Date(backup.timestamp).toLocaleString(),
-					backup.fileCount,
-				),
-			});
-			const restoreBtn = row.createEl('button', {
-				text: s.restore,
-				cls: 'easy-sync-btn easy-sync-btn-ghost easy-sync-btn-inline',
-			});
-			restoreBtn.addEventListener('click', () => {
-				const downloader = this.plugin.getBackupDownloader();
-				if (!downloader) {
-					new Notice(s.backupNotReady);
-					return;
-				}
-				void restoreBackupWithConfirm(this.app, downloader, backup.name);
-			});
-		}
+		const actions = section.createDiv({ cls: 'easy-sync-backup-actions' });
+		this.backupBtn = actions.createEl('button', {
+			text: s.backupNow,
+			cls: 'easy-sync-btn easy-sync-btn-ghost easy-sync-btn-block',
+		});
+		this.backupBtn.addEventListener('click', () => {
+			// Plugin finally refreshes the backup list; avoid a duplicate fetch here.
+			void this.plugin.triggerManualBackup();
+		});
+
+		this.refreshBackupsBtn = actions.createEl('button', {
+			text: s.refreshBackups,
+			cls: 'easy-sync-btn easy-sync-btn-ghost easy-sync-btn-block',
+		});
+		this.refreshBackupsBtn.addEventListener('click', () => {
+			void this.refreshBackups();
+		});
 	}
 }
 
-function statusLabel(summary: LastSyncSummary): string {
+function nextSyncLabel(nextSyncAt: number | null): string {
 	const s = t().sidebar;
+	if (nextSyncAt === null) {
+		return s.nextSyncManual;
+	}
+	return s.nextSyncAt(new Date(nextSyncAt).toLocaleString());
+}
+
+function statusLineText(summary: LastSyncSummary): string {
+	const s = t().sidebar;
+	let label: string;
 	switch (summary.status) {
 		case 'syncing':
-			return s.statusSyncing;
+			label = s.statusSyncing;
+			break;
 		case 'synced':
-			return s.statusSynced;
+			label = s.statusSynced;
+			break;
 		case 'conflicts':
-			return s.statusConflicts;
+			label = s.statusConflicts;
+			break;
 		case 'error':
-			return s.statusError;
+			label = s.statusError;
+			break;
 		default:
-			return s.statusIdle;
+			label = s.statusIdle;
 	}
+	if (summary.completedAt && summary.status !== 'syncing') {
+		return `${label} · ${new Date(summary.completedAt).toLocaleString()}`;
+	}
+	return label;
 }

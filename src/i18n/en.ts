@@ -13,6 +13,7 @@ export const en = {
 	},
 	settings: {
 		privacyHeading: 'Privacy',
+		privacyNoticeName: 'Data handling',
 		privacyBody: (configDir: string) =>
 			`Files are uploaded as-is (no client-side encryption). Anyone with your bucket credentials can read vault contents. Network requests go only to your configured S3-compatible endpoint. The secret access key is stored in Obsidian secret storage (not in this plugin’s data.json). Syncing your config folder (${configDir}/) can expose other plugins’ secrets — review exclude patterns carefully. This plugin’s own data.json is never synced.`,
 		connectionHeading: 'Connection',
@@ -44,6 +45,16 @@ export const en = {
 		syncPrefixDesc: 'S3 key prefix for synced vault files',
 		backupPrefix: 'Backup prefix',
 		backupPrefixDesc: 'S3 key prefix for snapshot backups',
+		backupHelpName: 'About backups',
+		backupHelpDesc:
+			'Manual snapshots of vault files (exclude patterns apply), stored as objects under the backup prefix. Keeps the newest 5. Restore overwrites the same paths only and does not delete other vault files.',
+		deleteAllBackupsName: 'Delete all backups',
+		deleteAllBackupsDesc:
+			'Permanently remove every snapshot under the backup prefix. Sync data is not affected.',
+		deleteAllBackupsButton: 'Delete all backups',
+		deleteAllBackupsConfirmTitle: 'Delete all backups?',
+		deleteAllBackupsConfirmBody:
+			'This permanently deletes every snapshot under the backup prefix. This cannot be undone. Continue?',
 		bucketLayoutHeading: 'Bucket layout',
 		bucketLayoutDesc: 'How prefixes sit under your bucket (preview updates as you edit):',
 		bucketLayoutSyncNote: 'synced vault files',
@@ -75,17 +86,25 @@ export const en = {
 		configurePrompt: 'Configure your S3 connection in settings to start syncing.',
 		openSettings: 'Open settings',
 		syncNow: 'Sync now',
+		syncingProgress: (done: number, total: number) => `Syncing ${done}/${total}`,
+		nextSyncAt: (when: string) => `Next sync · ${when}`,
+		nextSyncManual: 'Next sync · Manual only',
 		conflictOne: '1 conflict',
 		conflictsMany: (n: number) => `${n} conflicts`,
 		showDiff: 'Show diff',
+		backupsHeading: 'Backups',
 		backupNow: 'Backup now',
+		refreshBackups: 'Refresh list',
+		backingUpProgress: (done: number, total: number) => `Backing up ${done}/${total}`,
 		restore: 'Restore',
 		statusSyncing: 'Syncing…',
+		statusBackingUp: 'Backing up…',
 		statusSynced: 'Synced',
 		statusConflicts: 'Conflicts',
 		statusError: 'Error',
 		statusIdle: 'Idle',
 		loadingBackups: 'Loading backups…',
+		loadBackupsFailed: 'Could not load backups',
 		noBackupsYet: 'No backups yet (keeps the last 5)',
 		backupMeta: (when: string, count: number) =>
 			`${when} · ${count} ${count === 1 ? 'file' : 'files'}`,
@@ -104,10 +123,10 @@ export const en = {
 			`Restore “${name}”? Files present in this snapshot will overwrite ` +
 			'the same paths in your vault. Other vault files are left untouched.',
 		restoreConfirm: 'Restore',
-		restoring: 'Restoring backup…',
 		restoreDone: (n: number) => `Restore completed: ${n} files`,
 		restoreErrors: (restored: number, failed: number) =>
 			`Restore finished with errors: ${restored} restored, ${failed} failed`,
+		restoreFailed: (message: string) => `Restore failed: ${message}`,
 	},
 	conflict: {
 		emptyHint: 'Select a conflict in the Easy Cloud Sync sidebar, then choose Show diff.',
@@ -138,15 +157,17 @@ export const en = {
 		syncDidNotRun: 'Sync did not run — check the Easy Cloud Sync sidebar for details.',
 		syncErrors: (message: string) => `Sync completed with errors: ${message}`,
 		syncConflicts: (n: number) => `Sync completed with ${n} conflict(s)`,
-		syncDone: (up: number, down: number, del: number) =>
-			`Sync completed: ${up} uploaded, ${down} downloaded, ${del} deleted`,
-		startingSync: 'Starting sync…',
-		startingBackup: 'Starting backup…',
 		backupInProgress: 'Backup already in progress…',
 		backupNotReady: 'Backup system not initialized',
-		backupDone: (files: number) => `Backup completed: ${files} files`,
 		backupErrors: (message: string) => `Backup completed with errors: ${message}`,
 		backupFailed: (message: string) => `Backup failed: ${message}`,
+		deleteAllBackupsDone: (n: number) =>
+			n === 1 ? 'Deleted 1 backup' : `Deleted ${n} backups`,
+		deleteAllBackupsPartial: (deleted: number, failed: number) =>
+			`Deleted ${deleted} backup(s); ${failed} failed`,
+		deleteAllBackupsNone: 'No backups to delete',
+		deleteAllBackupsFailed: 'Failed to delete backups',
+		restoreInProgress: 'Restore already in progress…',
 		unknownError: 'Unknown error',
 		journalUnavailable: 'Sync journal is not available',
 		resetLocalStarted: 'Resetting this device from the cloud…',
