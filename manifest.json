@@ -1,7 +1,7 @@
 {
 	"id": "easy-cloud-sync",
 	"name": "Easy Cloud Sync",
-	"version": "1.0.3",
+	"version": "1.0.4",
 	"minAppVersion": "1.13.0",
 	"description": "Sync your vault to any S3-compatible store with clear conflict resolution and a mobile-friendly sync UI.",
 	"author": "GenoZhou",

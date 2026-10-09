@@ -1,6 +1,6 @@
 {
 	"name": "easy-cloud-sync",
-	"version": "1.0.3",
+	"version": "1.0.4",
 	"description": "Sync your Obsidian vault to any S3-compatible store with clear conflict resolution and a mobile-friendly sync UI.",
 	"main": "main.js",
 	"type": "module",
