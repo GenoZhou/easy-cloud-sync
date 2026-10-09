@@ -7,7 +7,7 @@
 
 import { ItemView, WorkspaceLeaf } from 'obsidian';
 import type EasySyncPlugin from '../main';
-import { BACKUP_RETAIN_COPIES, BackupInfo, ConflictRecord, LastSyncSummary } from '../types';
+import { BackupInfo, ConflictRecord, LastSyncSummary } from '../types';
 import { isConnectionConfigured } from '../storage/S3Config';
 import { formatOperationActionLabel } from '../utils/operationUi';
 import { t } from '../i18n';
@@ -146,7 +146,6 @@ export class EasySyncSidebarView extends ItemView {
 
 		try {
 			this.backups = (await this.plugin.getRetentionManager()?.listBackups()) ?? [];
-			this.backups = this.backups.slice(0, BACKUP_RETAIN_COPIES);
 			this.backupsLoaded = true;
 			this.backupsError = null;
 		} catch (error) {
@@ -285,6 +284,7 @@ export class EasySyncSidebarView extends ItemView {
 	private renderBackupSection(container: HTMLElement): void {
 		const section = container.createDiv({ cls: 'easy-sync-section' });
 		const s = t().sidebar;
+		const retainCopies = this.plugin.settings.backupRetainCopies;
 
 		section.createEl('h3', {
 			cls: 'easy-sync-section-heading',
@@ -304,11 +304,11 @@ export class EasySyncSidebarView extends ItemView {
 		} else if (this.backups.length === 0) {
 			section.createEl('p', {
 				cls: 'easy-sync-muted',
-				text: s.noBackupsYet,
+				text: s.noBackupsYet(retainCopies),
 			});
 		} else {
 			const list = section.createEl('ul', { cls: 'easy-sync-backup-list' });
-			for (const backup of this.backups) {
+			for (const backup of this.backups.slice(0, retainCopies)) {
 				const item = list.createEl('li', { cls: 'easy-sync-backup-item' });
 				const row = item.createDiv({ cls: 'easy-sync-backup-row' });
 				row.createDiv({

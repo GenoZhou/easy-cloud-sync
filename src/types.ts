@@ -24,8 +24,32 @@ export const S3_PROVIDER_NAMES: Record<S3ProviderType, string> = {
 /** 0 = manual only (no startup / interval sync). */
 export type SyncIntervalMinutes = 0 | 1 | 2 | 5 | 10 | 15 | 30;
 
-/** Fixed backup retention: keep newest 5 snapshots. */
-export const BACKUP_RETAIN_COPIES = 5;
+/** Default number of newest snapshots to keep. */
+export const DEFAULT_BACKUP_RETAIN_COPIES = 1;
+export const MIN_BACKUP_RETAIN_COPIES = 1;
+export const MAX_BACKUP_RETAIN_COPIES = 100;
+/** Fixed count used before the backup-copies setting existed. */
+export const LEGACY_BACKUP_RETAIN_COPIES = 5;
+
+/** Clamp a stored or edited backup count into the allowed range. */
+export function clampBackupRetainCopies(value: unknown): number {
+	const parsed = typeof value === 'number' ? value : Number(value);
+	if (!Number.isFinite(parsed)) return DEFAULT_BACKUP_RETAIN_COPIES;
+	return Math.min(
+		MAX_BACKUP_RETAIN_COPIES,
+		Math.max(MIN_BACKUP_RETAIN_COPIES, Math.floor(parsed)),
+	);
+}
+
+/**
+ * New installs keep {@link DEFAULT_BACKUP_RETAIN_COPIES}.
+ * Saved data from before this setting existed keeps {@link LEGACY_BACKUP_RETAIN_COPIES}.
+ */
+export function resolveBackupRetainCopies(saved: unknown): number {
+	if (saved === null || typeof saved !== 'object') return DEFAULT_BACKUP_RETAIN_COPIES;
+	if (!('backupRetainCopies' in saved)) return LEGACY_BACKUP_RETAIN_COPIES;
+	return clampBackupRetainCopies(saved.backupRetainCopies);
+}
 
 export interface EasySyncSettings {
 	provider: S3ProviderType;
@@ -39,8 +63,12 @@ export interface EasySyncSettings {
 
 	syncPrefix: string;
 	backupPrefix: string;
+	/** Newest snapshots to keep. Older ones are deleted after the next backup. */
+	backupRetainCopies: number;
 	excludePatterns: string[];
 	syncIntervalMinutes: SyncIntervalMinutes;
+	/** Snapshot before manual sync. */
+	backupBeforeSync: boolean;
 	debugLogging: boolean;
 }
 
@@ -55,8 +83,10 @@ export const DEFAULT_SETTINGS: EasySyncSettings = {
 
 	syncPrefix: 'vault',
 	backupPrefix: 'backups',
+	backupRetainCopies: DEFAULT_BACKUP_RETAIN_COPIES,
 	excludePatterns: ['**/workspace*', '.trash/**'],
 	syncIntervalMinutes: 5,
+	backupBeforeSync: false,
 	debugLogging: false,
 };
 

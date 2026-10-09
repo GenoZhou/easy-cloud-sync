@@ -45,9 +45,12 @@ export const en = {
 		syncPrefixDesc: 'S3 key prefix for synced vault files',
 		backupPrefix: 'Backup prefix',
 		backupPrefixDesc: 'S3 key prefix for snapshot backups',
+		backupRetainCopies: 'Backup copies',
+		backupRetainCopiesDesc:
+			'How many of the newest snapshots to keep. Older snapshots are deleted after the next backup.',
 		backupHelpName: 'About backups',
 		backupHelpDesc:
-			'Manual snapshots of vault files (exclude patterns apply), stored as objects under the backup prefix. Keeps the newest 5. Restore overwrites the same paths only and does not delete other vault files.',
+			'Manual snapshots of vault files (exclude patterns apply), stored as objects under the backup prefix. Restore overwrites the same paths only and does not delete other vault files.',
 		deleteAllBackupsName: 'Delete all backups',
 		deleteAllBackupsDesc:
 			'Permanently remove every snapshot under the backup prefix. Sync data is not affected.',
@@ -59,6 +62,9 @@ export const en = {
 		bucketLayoutDesc: 'How prefixes sit under your bucket (preview updates as you edit):',
 		bucketLayoutSyncNote: 'synced vault files',
 		bucketLayoutBackupNote: 'snapshot backups',
+		backupBeforeSync: 'Backup before manual sync',
+		backupBeforeSyncDesc:
+			'Create a snapshot before manual sync. Sync does not start if that backup fails.',
 		syncInterval: 'Sync interval',
 		syncIntervalDesc: 'Automatic sync interval. Choose Manual only to disable startup and scheduled sync.',
 		intervalOff: 'Manual only',
@@ -105,7 +111,7 @@ export const en = {
 		statusIdle: 'Idle',
 		loadingBackups: 'Loading backups…',
 		loadBackupsFailed: 'Could not load backups',
-		noBackupsYet: 'No backups yet (keeps the last 5)',
+		noBackupsYet: (n: number) => `No backups yet (keeps the last ${n})`,
 		backupMeta: (when: string, count: number) =>
 			`${when} · ${count} ${count === 1 ? 'file' : 'files'}`,
 		backupNotReady: 'Backup system not ready',
@@ -161,6 +167,10 @@ export const en = {
 		backupNotReady: 'Backup system not initialized',
 		backupErrors: (message: string) => `Backup completed with errors: ${message}`,
 		backupFailed: (message: string) => `Backup failed: ${message}`,
+		backupFailedSyncSkipped: (message: string) =>
+			`Backup failed, sync did not start: ${message}`,
+		retentionFailed: (message: string) =>
+			`Snapshot saved, but old backups could not be removed: ${message}`,
 		deleteAllBackupsDone: (n: number) =>
 			n === 1 ? 'Deleted 1 backup' : `Deleted ${n} backups`,
 		deleteAllBackupsPartial: (deleted: number, failed: number) =>

@@ -18,7 +18,7 @@ Keep your Obsidian vault in sync with **any S3-compatible object store** — AWS
 - Providers: AWS S3, Cloudflare R2, Other S3-compatible (custom endpoint + force path style)
 - Sync on startup, on an interval (1–30 minutes, default 5), and via **Sync now**
 - Sidebar ops surface: last sync summary, conflict list, backups
-- Manual snapshot backups under a backup prefix; retain newest 5; Restore (overwrite same paths only)
+- Manual snapshot backups under a backup prefix; keep the newest snapshots (default 1, configurable); optional snapshot before manual sync (off by default); Restore (overwrite same paths only)
 - **Advanced → Reset local (from cloud)**: clear the journal, then overwrite this device from the cloud
 - **Advanced → Reset cloud (from local)**: clear the journal, then overwrite the cloud from this device
 

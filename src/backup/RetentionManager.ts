@@ -4,11 +4,17 @@
  * Adapted from obsidian-s3-sync-and-backup (MIT)
  * Copyright (c) 2025 Sathindu
  *
- * Easy Sync: always retain the newest {@link BACKUP_RETAIN_COPIES} snapshots.
+ * Easy Sync: retain the newest {@link EasySyncSettings.backupRetainCopies} snapshots.
  */
 
 import { S3Provider } from '../storage/S3Provider';
-import { EasySyncSettings, BackupInfo, BackupManifest, BACKUP_RETAIN_COPIES } from '../types';
+import {
+	EasySyncSettings,
+	BackupInfo,
+	BackupManifest,
+	DEFAULT_BACKUP_RETAIN_COPIES,
+	clampBackupRetainCopies,
+} from '../types';
 import { addPrefix, normalizePrefix } from '../utils/paths';
 import type { DeleteAllBackupsResult } from '../utils/operationUi';
 
@@ -28,12 +34,12 @@ export class RetentionManager {
 		this.normalizedBackupPrefix = normalizePrefix(settings.backupPrefix);
 	}
 
-	/** Keep newest {@link BACKUP_RETAIN_COPIES}; delete older snapshots. */
 	async applyRetentionPolicy(): Promise<number> {
-		// listBackups() is newest-first; drop the tail beyond the retain limit.
 		const backups = await this.listBackups();
-		const toDelete =
-			backups.length > BACKUP_RETAIN_COPIES ? backups.slice(BACKUP_RETAIN_COPIES) : [];
+		const toDelete = backupsExceedingRetention(
+			backups,
+			clampBackupRetainCopies(this.settings.backupRetainCopies),
+		);
 
 		await Promise.all(toDelete.map((backup) => this.deleteBackup(backup.name)));
 
@@ -132,7 +138,7 @@ export class RetentionManager {
 /** Newest-first prune list for unit tests and retention policy. */
 export function backupsExceedingRetention(
 	backups: BackupInfo[],
-	retainCopies: number = BACKUP_RETAIN_COPIES,
+	retainCopies: number = DEFAULT_BACKUP_RETAIN_COPIES,
 ): BackupInfo[] {
 	const sorted = [...backups].sort(
 		(a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),

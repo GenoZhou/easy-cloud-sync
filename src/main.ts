@@ -2,7 +2,7 @@
  * Easy Cloud Sync — Obsidian community plugin
  *
  * Sync a vault to AWS S3, Cloudflare R2, or any S3-compatible endpoint,
- * with manual snapshot backups (retain 5) and conflict resolution UX.
+ * with manual snapshot backups (retain count is a setting, default 1) and conflict resolution UX.
  *
  * Sync engine / S3 transport adapted from obsidian-s3-sync-and-backup (MIT)
  * Copyright (c) 2025 Sathindu
@@ -16,6 +16,7 @@ import {
 	LastSyncSummary,
 	OperationProgress,
 	ResetAuthority,
+	resolveBackupRetainCopies,
 	SyncResult,
 } from './types';
 import { S3Provider } from './storage/S3Provider';
@@ -183,7 +184,8 @@ export default class EasySyncPlugin extends Plugin {
 	}
 
 	async loadSettings(): Promise<void> {
-		const loaded = ((await this.loadData()) ?? {}) as Partial<EasySyncSettings> & {
+		const saved: unknown = await this.loadData();
+		const loaded = (saved ?? {}) as Partial<EasySyncSettings> & {
 			secretAccessKey?: string;
 			conflictFolder?: string;
 		};
@@ -191,6 +193,8 @@ export default class EasySyncPlugin extends Plugin {
 		delete loaded.secretAccessKey;
 		delete loaded.conflictFolder;
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded);
+		this.settings.backupRetainCopies = resolveBackupRetainCopies(saved);
+		this.settings.backupBeforeSync = this.settings.backupBeforeSync === true;
 	}
 
 	async saveSettings(): Promise<void> {
@@ -262,7 +266,7 @@ export default class EasySyncPlugin extends Plugin {
 				? t().notices.resetLocalStarted
 				: t().notices.resetCloudStarted,
 		);
-		await this.triggerManualSync();
+		await this.triggerManualSync({ skipBackup: true });
 	}
 
 	private registerCommands(): void {
@@ -303,7 +307,7 @@ export default class EasySyncPlugin extends Plugin {
 		this.syncScheduler?.stop();
 	}
 
-	async triggerManualSync(): Promise<void> {
+	async triggerManualSync(options?: { skipBackup?: boolean }): Promise<void> {
 		if (!isConnectionConfigured(this.app, this.settings)) {
 			new Notice(t().notices.configureBeforeSync);
 			return;
@@ -312,6 +316,11 @@ export default class EasySyncPlugin extends Plugin {
 		if (this.isVaultMutationBusy()) {
 			new Notice(this.busyNoticeMessage());
 			return;
+		}
+
+		if (!options?.skipBackup && this.settings.backupBeforeSync) {
+			const backedUp = await this.executeBackup({ beforeSync: true });
+			if (!backedUp) return;
 		}
 
 		const result = await this.syncScheduler?.triggerSync('manual');
@@ -344,9 +353,24 @@ export default class EasySyncPlugin extends Plugin {
 			return;
 		}
 
+		await this.executeBackup();
+	}
+
+	/**
+	 * Create a snapshot. Older copies are pruned only after a complete snapshot.
+	 * A prune failure does not fail the snapshot. Returns false when the snapshot
+	 * is missing or incomplete.
+	 */
+	private async executeBackup(options?: { beforeSync?: boolean }): Promise<boolean> {
+		const notifyFailure = (message: string, manualNotice: string) => {
+			new Notice(
+				options?.beforeSync ? t().notices.backupFailedSyncSkipped(message) : manualNotice,
+			);
+		};
+
 		if (!this.snapshotCreator || !this.retentionManager) {
-			new Notice(t().notices.backupNotReady);
-			return;
+			notifyFailure(t().notices.backupNotReady, t().notices.backupNotReady);
+			return false;
 		}
 
 		this.isBackupRunning = true;
@@ -364,20 +388,25 @@ export default class EasySyncPlugin extends Plugin {
 				},
 			);
 
-			// Retain-5 whenever a snapshot exists on S3, including partial success.
-			if (result.snapshotCreated) {
-				await this.retentionManager.applyRetentionPolicy();
-			}
-
 			if (!result.success) {
 				const errorMsg = result.errors[0] ?? t().notices.unknownError;
-				new Notice(t().notices.backupErrors(errorMsg));
+				notifyFailure(errorMsg, t().notices.backupErrors(errorMsg));
+				return false;
 			}
-			// Success / progress: sidebar button label + backup list refresh; no toast.
+
+			try {
+				await this.retentionManager.applyRetentionPolicy();
+			} catch (error) {
+				const errorMessage =
+					error instanceof Error ? error.message : t().notices.unknownError;
+				new Notice(t().notices.retentionFailed(errorMessage));
+			}
+			return true;
 		} catch (error) {
 			const errorMessage =
 				error instanceof Error ? error.message : t().notices.unknownError;
-			new Notice(t().notices.backupFailed(errorMessage));
+			notifyFailure(errorMessage, t().notices.backupFailed(errorMessage));
+			return false;
 		} finally {
 			this.clearProgressUiSchedule();
 			this.isBackupRunning = false;

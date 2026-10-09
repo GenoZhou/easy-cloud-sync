@@ -1,6 +1,6 @@
 /**
- * Settings tab — connection, prefixes, excludes, interval, authority reset.
- * No sync/backup enable toggles; no retention knobs.
+ * Settings tab — connection, prefixes, excludes, interval, backup count, authority reset.
+ * No sync/backup enable toggles.
  *
  * Declarative settings API (Obsidian 1.13+): `getSettingDefinitions()`.
  */
@@ -16,6 +16,9 @@ import type EasySyncPlugin from './main';
 import {
 	EasySyncSettings,
 	ResetAuthority,
+	clampBackupRetainCopies,
+	MAX_BACKUP_RETAIN_COPIES,
+	MIN_BACKUP_RETAIN_COPIES,
 	S3ProviderType,
 	S3_PROVIDER_NAMES,
 	SyncIntervalMinutes,
@@ -186,6 +189,17 @@ export class EasySyncSettingTab extends PluginSettingTab {
 						},
 					},
 					{
+						name: s.backupRetainCopies,
+						desc: s.backupRetainCopiesDesc,
+						control: {
+							type: 'number',
+							key: 'backupRetainCopies',
+							min: MIN_BACKUP_RETAIN_COPIES,
+							max: MAX_BACKUP_RETAIN_COPIES,
+							step: 1,
+						},
+					},
+					{
 						name: s.bucketLayoutHeading,
 						desc: s.bucketLayoutDesc,
 						searchable: false,
@@ -222,6 +236,14 @@ export class EasySyncSettingTab extends PluginSettingTab {
 							type: 'dropdown',
 							key: 'syncIntervalMinutes',
 							options: intervalOptions,
+						},
+					},
+					{
+						name: s.backupBeforeSync,
+						desc: s.backupBeforeSyncDesc,
+						control: {
+							type: 'toggle',
+							key: 'backupBeforeSync',
 						},
 					},
 				],
@@ -299,6 +321,8 @@ export class EasySyncSettingTab extends PluginSettingTab {
 				.filter((line) => line.length > 0);
 		} else if (key === 'syncIntervalMinutes') {
 			settings.syncIntervalMinutes = Number(value) as SyncIntervalMinutes;
+		} else if (key === 'backupRetainCopies') {
+			settings.backupRetainCopies = clampBackupRetainCopies(value);
 		} else if (key === 'syncPrefix' || key === 'backupPrefix') {
 			settings[key] = normalizePrefix(String(value));
 		} else if (
@@ -312,6 +336,8 @@ export class EasySyncSettingTab extends PluginSettingTab {
 			settings.provider = value as S3ProviderType;
 		} else if (key === 'forcePathStyle') {
 			settings.forcePathStyle = Boolean(value);
+		} else if (key === 'backupBeforeSync') {
+			settings.backupBeforeSync = value === true;
 		} else if (key in settings) {
 			(settings as unknown as Record<string, unknown>)[key] = value;
 		}

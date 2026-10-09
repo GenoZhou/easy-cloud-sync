@@ -46,9 +46,11 @@ export const zh: LocaleStrings = {
 		syncPrefixDesc: '同步库文件的 S3 键前缀',
 		backupPrefix: '备份前缀',
 		backupPrefixDesc: '快照备份的 S3 键前缀',
+		backupRetainCopies: '备份数量',
+		backupRetainCopiesDesc: '保留最近的快照份数。超出的旧快照会在下次备份后删除。',
 		backupHelpName: '关于备份',
 		backupHelpDesc:
-			'手动快照会按排除规则上传库文件，以对象形式保存在备份前缀下，并保留最近 5 份。恢复只覆盖快照中的相同路径，不会删除库里的其他文件。',
+			'手动快照会按排除规则上传库文件，以对象形式保存在备份前缀下。恢复只覆盖快照中的相同路径，不会删除库里的其他文件。',
 		deleteAllBackupsName: '删除全部备份',
 		deleteAllBackupsDesc: '永久删除备份前缀下的所有快照。不影响同步数据。',
 		deleteAllBackupsButton: '删除全部备份',
@@ -59,6 +61,9 @@ export const zh: LocaleStrings = {
 		bucketLayoutDesc: '前缀在存储桶中的位置预览（随上方设置即时更新）：',
 		bucketLayoutSyncNote: '同步的库文件',
 		bucketLayoutBackupNote: '快照备份',
+		backupBeforeSync: '手动同步前自动备份',
+		backupBeforeSyncDesc:
+			'在手动同步开始前先创建一份快照。备份失败时不会开始同步。',
 		syncInterval: '同步间隔',
 		syncIntervalDesc: '自动同步频率。选择「不自动同步」可关闭启动同步与定时同步。',
 		intervalOff: '不自动同步',
@@ -105,7 +110,7 @@ export const zh: LocaleStrings = {
 		statusIdle: '空闲',
 		loadingBackups: '正在加载备份…',
 		loadBackupsFailed: '无法加载备份列表',
-		noBackupsYet: '暂无备份（保留最近 5 份）',
+		noBackupsYet: (n: number) => `暂无备份（保留最近 ${n} 份）`,
 		backupMeta: (when, count) => `${when} · ${count} 个文件`,
 		backupNotReady: '备份系统尚未就绪',
 		statLine: (up, down, del, conflicts, skipped) =>
@@ -153,6 +158,10 @@ export const zh: LocaleStrings = {
 		backupNotReady: '备份系统尚未初始化',
 		backupErrors: (message: string) => `备份完成但有错误：${message}`,
 		backupFailed: (message: string) => `备份失败：${message}`,
+		backupFailedSyncSkipped: (message: string) =>
+			`备份失败，同步未开始：${message}`,
+		retentionFailed: (message: string) =>
+			`快照已保存，但未能删除旧备份：${message}`,
 		deleteAllBackupsDone: (n: number) =>
 			n === 1 ? '已删除 1 份备份' : `已删除 ${n} 份备份`,
 		deleteAllBackupsPartial: (deleted, failed) =>

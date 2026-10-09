@@ -12,7 +12,7 @@ import { Plugin } from 'obsidian';
 import { SyncEngine } from './SyncEngine';
 import { EasySyncSettings, SyncResult } from '../types';
 import { isConnectionConfigured } from '../storage/S3Config';
-import { allowsAutomaticSync, shouldSkipAutomaticTrigger } from './autoSync';
+import { allowsAutomaticSync, shouldSkipAutomaticTrigger, type SyncTrigger } from './autoSync';
 
 export class SyncScheduler {
 	private plugin: Plugin;
@@ -107,9 +107,7 @@ export class SyncScheduler {
 		return this.nextSyncAt;
 	}
 
-	async triggerSync(
-		trigger: 'manual' | 'scheduled' | 'startup',
-	): Promise<SyncResult | null> {
+	async triggerSync(trigger: SyncTrigger): Promise<SyncResult | null> {
 		if (this.syncEngine.isInProgress()) {
 			if (this.settings.debugLogging) {
 				console.debug('[Easy Sync] Skipping - sync already in progress');
